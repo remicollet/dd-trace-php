@@ -43,7 +43,7 @@ class SymfonyBundle extends Bundle
             return;
         }
 
-        if (php_sapi_name() == 'cli') {
+        if (getenv('APP_ENV') != 'dd_testing' && php_sapi_name() == 'cli') {
             return;
         }
 
