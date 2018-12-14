@@ -30,10 +30,8 @@ The PHP tracer is composed of a PHP extension and a Composer package. You'll nee
 First we'll install the Composer package.
 
 ```bash
-$ composer require datadog/dd-trace opentracing/opentracing:@dev
+$ composer require datadog/dd-trace
 ```
-
-> **Note:** Since the [OpenTracing dependency](https://github.com/opentracing/opentracing-php) is still in beta, adding the `opentracing/opentracing:@dev` argument to the `composer require` command will ensure the library is installed without changing your Composer minimum stability settings.
 
 #### Installing the extension (from a package)
 
@@ -74,7 +72,7 @@ Once the `ddtrace` extension and Composer package is installed, you can start tr
 
 ```php
 use DDTrace\Tracer;
-use OpenTracing\GlobalTracer;
+use DDTrace\GlobalTracer;
 use DDTrace\Integrations\IntegrationsLoader;
 
 // Creates a tracer with default transport and propagators
@@ -91,7 +89,7 @@ register_shutdown_function(function() {
 IntegrationsLoader::load();
 
 // Start a root span
-$scope = $tracer->startSpan('my_base_trace');
+$scope = $tracer->startActiveSpan('my_base_trace');
 
 // Run your application here
 // $myApplication->run();
@@ -114,7 +112,7 @@ For more information about configuration and specific framework integrations, ch
 
 ### Advanced configuration
 
-In order to be familiar with tracing elements it is recommended to read the [OpenTracing specification](https://github.com/opentracing/specification/blob/master/specification.md).
+> **Note:** As ddtrace is modeled off of [OpenTracing](https://opentracing.io/), it is recommended to read the [OpenTracing specification](https://github.com/opentracing/specification/blob/master/specification.md) to familiarize yourself with distributed tracing concepts.
 
 The transport can be customized by the config parameters:
 
@@ -135,7 +133,7 @@ The tracer can be customized by the config settings:
 
 ```php
 use DDTrace\Tracer;
-use OpenTracing\Formats;
+use DDTrace\Formats;
 
 // Config for tracer
 $config = [
@@ -151,7 +149,11 @@ $tracer = new Tracer(
 );
 ```
 
-### Creating Spans
+### OpenTracing
+
+The following documentation is specific to the OpenTracing package, but many of the concepts work the same for the ddtrace extension.
+
+#### Creating Spans
 
 - [Starting a root span](https://github.com/opentracing/opentracing-php#starting-an-empty-trace-by-creating-a-root-span)
 - [Starting a span for a given request](https://github.com/opentracing/opentracing-php#creating-a-span-given-an-existing-request)
@@ -160,7 +162,7 @@ $tracer = new Tracer(
   - [Creating a child span using automatic active span management](https://github.com/opentracing/opentracing-php#creating-a-child-span-using-automatic-active-span-management)
 - [Using span options](https://github.com/opentracing/opentracing-php#using-span-options)
 
-### Propagation of context
+#### Propagation of context
 
 - [Serializing context to the wire](https://github.com/opentracing/opentracing-php#serializing-to-the-wire)
 - [Deserializing context from the wire](https://github.com/opentracing/opentracing-php#deserializing-from-the-wire)
