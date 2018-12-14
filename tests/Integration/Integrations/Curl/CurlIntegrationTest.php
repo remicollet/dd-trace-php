@@ -10,7 +10,7 @@ use DDTrace\Tests\Integration\Common\IntegrationTestCase;
 use DDTrace\Tests\Integration\Common\SpanAssertion;
 use DDTrace\Tracer;
 use DDTrace\Util\ArrayKVStore;
-use OpenTracing\GlobalTracer;
+use DDTrace\GlobalTracer;
 
 final class CurlIntegrationTest extends IntegrationTestCase
 {
