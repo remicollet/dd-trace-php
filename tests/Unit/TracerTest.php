@@ -81,7 +81,7 @@ final class TracerTest extends Framework\TestCase
 
     public function testInjectThrowsUnsupportedFormatException()
     {
-        $this->expectException('DDTrace\OpenTracing\Exceptions\UnsupportedFormat');
+        $this->expectException('DDTrace\Exceptions\UnsupportedFormat');
         $context = SpanContext::createAsRoot();
         $carrier = [];
 
@@ -102,7 +102,7 @@ final class TracerTest extends Framework\TestCase
 
     public function testExtractThrowsUnsupportedFormatException()
     {
-        $this->expectException('DDTrace\OpenTracing\Exceptions\UnsupportedFormat');
+        $this->expectException('DDTrace\Exceptions\UnsupportedFormat');
         $carrier = [];
         $tracer = new Tracer(new NoopTransport());
         $tracer->extract(self::FORMAT, $carrier);
