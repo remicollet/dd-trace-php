@@ -122,4 +122,6 @@ interface Tracer
      * to the client.
      */
     public function flush();
+
+    public function reset();
 }

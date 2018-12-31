@@ -7,6 +7,7 @@ use DDTrace\Integrations\Curl\CurlIntegration;
 use DDTrace\Integrations\ElasticSearch\V1\ElasticSearchIntegration;
 use DDTrace\Integrations\Eloquent\EloquentIntegration;
 use DDTrace\Integrations\Guzzle\V5\GuzzleIntegration;
+use DDTrace\Integrations\Laravel\LaravelIntegration;
 use DDTrace\Integrations\Memcached\MemcachedIntegration;
 use DDTrace\Integrations\Mongo\MongoIntegration;
 use DDTrace\Integrations\Mysqli\MysqliIntegration;
@@ -18,6 +19,8 @@ use DDTrace\Integrations\Predis\PredisIntegration;
  */
 class IntegrationsLoader
 {
+    private static $loaded = false;
+
     /**
      * @return array A list of supported library integrations. Web frameworks ARE NOT INCLUDED.
      */
@@ -28,6 +31,7 @@ class IntegrationsLoader
             ElasticSearchIntegration::NAME => '\DDTrace\Integrations\ElasticSearch\V1\ElasticSearchIntegration',
             EloquentIntegration::NAME => '\DDTrace\Integrations\Eloquent\EloquentIntegration',
             GuzzleIntegration::NAME => '\DDTrace\Integrations\Guzzle\V5\GuzzleIntegration',
+            LaravelIntegration::NAME => '\DDTrace\Integrations\Laravel\LaravelIntegration',
             MemcachedIntegration::NAME => '\DDTrace\Integrations\Memcached\MemcachedIntegration',
             MongoIntegration::NAME => '\DDTrace\Integrations\Mongo\MongoIntegration',
             MysqliIntegration::NAME => '\DDTrace\Integrations\Mysqli\MysqliIntegration',
@@ -41,6 +45,11 @@ class IntegrationsLoader
      */
     public static function load()
     {
+        if (self::$loaded) {
+            return;
+        }
+        self::$loaded = true;
+
         $globalConfig = Configuration::get();
 
         if (!$globalConfig->isEnabled()) {

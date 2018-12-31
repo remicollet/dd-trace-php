@@ -5,7 +5,6 @@ namespace DDTrace\Integrations\Laravel\V4;
 use DDTrace;
 use DDTrace\Configuration;
 use DDTrace\Encoders\Json;
-use DDTrace\Integrations\IntegrationsLoader;
 use DDTrace\StartSpanOptionsFactory;
 use DDTrace\Tags;
 use DDTrace\Tracer;
@@ -50,19 +49,17 @@ class LaravelProvider extends ServiceProvider
             return;
         }
 
-        // Creates a tracer with default transport and default encoders
-        $tracer = new Tracer(new Http(new Json()));
-
-        // Sets a global tracer (singleton). Also store it in the Laravel
-        // container for easy Laravel-specific use.
-        GlobalTracer::set($tracer);
-        $this->app->instance('DDTrace\Tracer', $tracer);
+        $this->app->instance('DDTrace\Tracer', GlobalTracer::get());
     }
 
     /** @inheritdoc */
     public function boot()
     {
         if (!Configuration::get()->isIntegrationEnabled(self::NAME)) {
+            return;
+        }
+
+        if (getenv('APP_ENV') != 'dd_testing' && php_sapi_name() == 'cli') {
             return;
         }
 
@@ -93,15 +90,6 @@ class LaravelProvider extends ServiceProvider
             $span->setTag('laravel.route.action', $route->getActionName());
             $span->setTag(Tags::HTTP_METHOD, $request->method());
             $span->setTag(Tags::HTTP_URL, $request->url());
-        });
-
-        // Enable other integrations
-        IntegrationsLoader::load();
-
-        // Flushes traces to agent.
-        register_shutdown_function(function () use ($scope) {
-            $scope->close();
-            GlobalTracer::get()->flush();
         });
 
         dd_trace('Illuminate\Foundation\Application', 'handle', function () use ($requestSpan) {

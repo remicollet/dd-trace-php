@@ -14,6 +14,13 @@ final class ScopeManager implements ScopeManagerInterface
     private $scopes = [];
 
     /**
+     * Represents the current request root span. In case of distributed tracing, this represents the request root span.
+     *
+     * @var ScopeInterface[]
+     */
+    private $hostRootScopes = [];
+
+    /**
      * {@inheritdoc}
      * @param Span|SpanInterface $span
      */
@@ -21,6 +28,12 @@ final class ScopeManager implements ScopeManagerInterface
     {
         $scope = new Scope($this, $span, $finishSpanOnClose);
         $this->scopes[] = $scope;
+
+        if ($span->getContext()->isHostRoot()) {
+            error_log("Found host root: " . print_r(1, 1));
+            $this->hostRootScopes[] = $scope;
+        }
+
         return $scope;
     }
 
@@ -45,5 +58,16 @@ final class ScopeManager implements ScopeManagerInterface
         }
 
         array_splice($this->scopes, $i, 1);
+    }
+
+    /**
+     * Closes all the current request root spans. Typically there only will be one.
+     */
+    public function closeAllHostRoots()
+    {
+        foreach ($this->hostRootScopes as $scope) {
+            error_log("Forcing close root scope: " . print_r(1, 1));
+            $scope->close();
+        }
     }
 }
