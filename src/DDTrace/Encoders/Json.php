@@ -7,21 +7,9 @@ use DDTrace\Sampling\PrioritySampling;
 use DDTrace\Span;
 use DDTrace\Tracer;
 use DDTrace\GlobalTracer;
-use Psr\Log\LoggerInterface;
-use Psr\Log\NullLogger;
 
 final class Json implements Encoder
 {
-    /**
-     * @var LoggerInterface
-     */
-    private $logger;
-
-    public function __construct(LoggerInterface $logger = null)
-    {
-        $this->logger = $logger ?: new NullLogger();
-    }
-
     /**
      * {@inheritdoc}
      */
@@ -53,7 +41,7 @@ final class Json implements Encoder
     {
         $json = json_encode($this->spanToArray($span, $tracer));
         if (false === $json) {
-            $this->logger->debug("Failed to json-encode span: " . json_last_error_msg());
+            error_log("Failed to json-encode span: " . json_last_error_msg());
             return "";
         }
 

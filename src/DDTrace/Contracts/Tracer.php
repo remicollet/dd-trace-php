@@ -41,7 +41,7 @@ interface Tracer
      *     ]);
      *     $span = $scope->getSpan();
      *     try {
-     *         $span->setTag(Tags\HTTP_METHOD, 'GET');
+     *         $span->setTag(Tags::HTTP_METHOD, 'GET');
      *         // ...
      *     } finally {
      *         $scope->close();

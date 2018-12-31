@@ -1,5 +1,8 @@
 <?php
 
-namespace DDTrace\Version;
+namespace DDTrace;
 
-const VERSION = '0.8.1-beta';
+class Version
+{
+    const VERSION = '0.8.1-beta';
+}

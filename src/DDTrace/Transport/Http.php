@@ -5,14 +5,10 @@ namespace DDTrace\Transport;
 use DDTrace\Configuration;
 use DDTrace\Encoder;
 use DDTrace\Sampling\PrioritySampling;
-use DDTrace\Span;
 use DDTrace\Tracer;
 use DDTrace\Transport;
 use DDTrace\Version;
 use DDTrace\GlobalTracer;
-use Psr\Log\LoggerInterface;
-use Psr\Log\NullLogger;
-
 
 final class Http implements Transport
 {
@@ -46,17 +42,16 @@ final class Http implements Transport
      */
     private $logger;
 
-    public function __construct(Encoder $encoder, LoggerInterface $logger = null, array $config = [])
+    public function __construct(Encoder $encoder, array $config = [])
     {
         $this->configure($config);
 
         $this->encoder = $encoder;
-        $this->logger = $logger ?: new NullLogger();
 
         $this->setHeader('Datadog-Meta-Lang', 'php');
         $this->setHeader('Datadog-Meta-Lang-Version', \PHP_VERSION);
         $this->setHeader('Datadog-Meta-Lang-Interpreter', \PHP_SAPI);
-        $this->setHeader('Datadog-Meta-Tracer-Version', Version\VERSION);
+        $this->setHeader('Datadog-Meta-Tracer-Version', Version::VERSION);
     }
 
     /**
@@ -118,7 +113,7 @@ final class Http implements Transport
         curl_setopt($handle, CURLOPT_HTTPHEADER, $curlHeaders);
 
         if (curl_exec($handle) === false) {
-            $this->logger->debug(sprintf(
+            error_log(sprintf(
                 'Reporting of spans failed: %s, error code %s',
                 curl_error($handle),
                 curl_errno($handle)
@@ -131,12 +126,12 @@ final class Http implements Transport
         curl_close($handle);
 
         if ($statusCode === 415) {
-            $this->logger->debug('Reporting of spans failed, upgrade your client library.');
+            error_log('Reporting of spans failed, upgrade your client library.');
             return;
         }
 
         if ($statusCode !== 200) {
-            $this->logger->debug(
+            error_log(
                 sprintf('Reporting of spans failed, status code %d', $statusCode)
             );
             return;
