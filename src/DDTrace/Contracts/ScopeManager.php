@@ -44,5 +44,5 @@ interface ScopeManager
     /**
      * Closes all the current request root spans. Typically there only will be one.
      */
-    public function closeAllHostRoots();
+    public function close();
 }

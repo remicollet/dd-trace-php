@@ -30,7 +30,6 @@ final class ScopeManager implements ScopeManagerInterface
         $this->scopes[] = $scope;
 
         if ($span->getContext()->isHostRoot()) {
-            error_log("Found host root: " . print_r(1, 1));
             $this->hostRootScopes[] = $scope;
         }
 
@@ -63,10 +62,9 @@ final class ScopeManager implements ScopeManagerInterface
     /**
      * Closes all the current request root spans. Typically there only will be one.
      */
-    public function closeAllHostRoots()
+    public function close()
     {
         foreach ($this->hostRootScopes as $scope) {
-            error_log("Forcing close root scope: " . print_r(1, 1));
             $scope->close();
         }
     }

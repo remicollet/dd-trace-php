@@ -14,10 +14,8 @@ $tracer = new Tracer(new Http(new Json()));
 
 GlobalTracer::set($tracer);
 
-// The root scope WILL not be created here, but our tracer will provide a way to flush the root span.
-
 register_shutdown_function(function() use ($tracer) {
-    $tracer->getScopeManager()->closeAllHostRoots();
+    $tracer->getScopeManager()->close();
     $tracer->flush();
 });
 

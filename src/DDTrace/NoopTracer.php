@@ -71,4 +71,8 @@ final class NoopTracer implements TracerInterface
     public function flush()
     {
     }
+
+    public function reset()
+    {
+    }
 }

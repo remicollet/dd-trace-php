@@ -88,11 +88,15 @@ final class Tracer implements TracerInterface
         $this->reset();
     }
 
+    /**
+     * Resets this tracer to its original state.
+     */
     public function reset()
     {
         $this->scopeManager = new ScopeManager();
         $this->globalConfig = Configuration::get();
         $this->sampler = new AlwaysKeepSampler();
+        $this->traces = [];
     }
 
     /**

@@ -47,7 +47,7 @@ trait TracerTestTrait
         // `register_shutdown_function`.
         // We need yet to find a strategy, though, to make sure that the `register_shutdown_function` is actually there
         // and that do not magically disappear. Here we are faking things.
-        $tracer->getScopeManager()->closeAllHostRoots();
+        $tracer->getScopeManager()->close();
 
         return $this->flushAndGetTraces($transport);
     }

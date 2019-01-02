@@ -4,11 +4,8 @@ namespace DDTrace\Integrations\Laravel\V4;
 
 use DDTrace;
 use DDTrace\Configuration;
-use DDTrace\Encoders\Json;
 use DDTrace\StartSpanOptionsFactory;
 use DDTrace\Tags;
-use DDTrace\Tracer;
-use DDTrace\Transport\Http;
 use DDTrace\Types;
 use DDTrace\Util\TryCatchFinally;
 use Illuminate\Support\Facades\Route;
@@ -63,42 +60,46 @@ class LaravelProvider extends ServiceProvider
             return;
         }
 
+        $appName = $this->getAppName();
         $tracer = GlobalTracer::get();
+        $rootScope = null;
 
-        $startSpanOptions = StartSpanOptionsFactory::createForWebRequest(
-            $tracer,
-            [
-                'start_time' => DDTrace\Time::now(),
-            ],
-            $this->app->make('request')->header()
-        );
+        // Root request span
+        dd_trace('Illuminate\Foundation\Application', 'handle', function () use ($appName, $tracer, &$rootScope) {
+            $args = func_get_args();
+            $request = $args[0];
+            $startSpanOptions = StartSpanOptionsFactory::createForWebRequest(
+                $tracer,
+                [
+                    'start_time' => DDTrace\Time::now(),
+                ],
+                $request->header()
+            );
 
-        // Create a span that starts from when Laravel first boots (public/index.php)
-        $scope = $tracer->startActiveSpan('laravel.request', $startSpanOptions);
-        $requestSpan = $scope->getSpan();
-        $requestSpan->setTag(Tags::SERVICE_NAME, $this->getAppName());
-        $requestSpan->setTag(Tags::SPAN_TYPE, Types::WEB_SERVLET);
+            // Create a span that starts from when Laravel first boots (public/index.php)
+            $rootScope = $tracer->startActiveSpan('laravel.request', $startSpanOptions);
+
+            $requestSpan = $rootScope->getSpan();
+            $requestSpan->setTag(Tags::SERVICE_NAME, $appName);
+            $requestSpan->setTag(Tags::SPAN_TYPE, Types::WEB_SERVLET);
+
+            $response = call_user_func_array([$this, 'handle'], $args);
+            $requestSpan->setTag(Tags::HTTP_STATUS_CODE, $response->getStatusCode());
+
+            return $response;
+        });
 
         // Name the scope when the route matches
-        $this->app['events']->listen('router.matched', function () use ($scope) {
+        $this->app['events']->listen('router.matched', function () use (&$rootScope) {
             $args = func_get_args();
             list($route, $request) = $args;
-            $span = $scope->getSpan();
+            $span = $rootScope->getSpan();
 
             $span->setTag(Tags::RESOURCE_NAME, $route->getActionName() . ' ' . Route::currentRouteName());
             $span->setTag('laravel.route.name', $route->getName());
             $span->setTag('laravel.route.action', $route->getActionName());
             $span->setTag(Tags::HTTP_METHOD, $request->method());
             $span->setTag(Tags::HTTP_URL, $request->url());
-        });
-
-        dd_trace('Illuminate\Foundation\Application', 'handle', function () use ($requestSpan) {
-            $args = func_get_args();
-
-            $response = call_user_func_array([$this, 'handle'], $args);
-            $requestSpan->setTag(Tags::HTTP_STATUS_CODE, $response->getStatusCode());
-
-            return $response;
         });
 
         dd_trace('Illuminate\Routing\Route', 'run', function () {
