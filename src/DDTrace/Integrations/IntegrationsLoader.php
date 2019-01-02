@@ -13,6 +13,7 @@ use DDTrace\Integrations\Mongo\MongoIntegration;
 use DDTrace\Integrations\Mysqli\MysqliIntegration;
 use DDTrace\Integrations\PDO\PDOIntegration;
 use DDTrace\Integrations\Predis\PredisIntegration;
+use DDTrace\Integrations\Symfony\SymfonyIntegration;
 
 /**
  * Loader for all integrations currently enabled.
@@ -37,6 +38,7 @@ class IntegrationsLoader
             MysqliIntegration::NAME => '\DDTrace\Integrations\Mysqli\MysqliIntegration',
             PDOIntegration::NAME => '\DDTrace\Integrations\PDO\PDOIntegration',
             PredisIntegration::NAME => '\DDTrace\Integrations\Predis\PredisIntegration',
+            SymfonyIntegration::NAME => '\DDTrace\Integrations\Symfony\SymfonyIntegration',
         ];
     }
 
