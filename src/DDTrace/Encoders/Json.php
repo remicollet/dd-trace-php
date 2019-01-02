@@ -53,7 +53,7 @@ final class Json implements Encoder
     {
         $json = json_encode($this->spanToArray($span, $tracer));
         if (false === $json) {
-            error_log("Failed to json-encode span: " . json_last_error_msg());
+            $this->logger->debug("Failed to json-encode span: " . json_last_error_msg());
             return "";
         }
 

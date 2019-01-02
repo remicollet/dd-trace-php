@@ -44,7 +44,6 @@ final class IntegrationsLoaderTest extends Framework\TestCase
     private static function frameworks()
     {
         return [
-            'laravel',
             'symfony',
         ];
     }

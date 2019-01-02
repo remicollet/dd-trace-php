@@ -43,7 +43,7 @@ final class Http implements Transport
      */
     private $logger;
 
-    public function __construct(Encoder $encoder, LoggerInterface $logger, array $config = [])
+    public function __construct(Encoder $encoder, LoggerInterface $logger = null, array $config = [])
     {
         $this->configure($config);
 
@@ -115,7 +115,7 @@ final class Http implements Transport
         curl_setopt($handle, CURLOPT_HTTPHEADER, $curlHeaders);
 
         if (curl_exec($handle) === false) {
-            error_log(sprintf(
+            $this->logger->debug(sprintf(
                 'Reporting of spans failed: %s, error code %s',
                 curl_error($handle),
                 curl_errno($handle)
@@ -128,12 +128,12 @@ final class Http implements Transport
         curl_close($handle);
 
         if ($statusCode === 415) {
-            error_log('Reporting of spans failed, upgrade your client library.');
+            $this->logger->debug('Reporting of spans failed, upgrade your client library.');
             return;
         }
 
         if ($statusCode !== 200) {
-            error_log(
+            $this->logger->debug(
                 sprintf('Reporting of spans failed, status code %d', $statusCode)
             );
             return;

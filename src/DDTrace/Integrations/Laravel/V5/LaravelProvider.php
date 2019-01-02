@@ -72,8 +72,8 @@ class LaravelProvider extends ServiceProvider
                 $tracer,
                 [
                     'start_time' => defined('LARAVEL_START')
-                        ? DDTrace\Time::fromMicrotime(LARAVEL_START)
-                        : DDTrace\Time::now(),
+                        ? Time::fromMicrotime(LARAVEL_START)
+                        : Time::now(),
                 ],
                 $request->header()
             );
