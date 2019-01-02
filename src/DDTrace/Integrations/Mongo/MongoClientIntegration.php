@@ -3,7 +3,7 @@
 namespace DDTrace\Integrations\Mongo;
 
 use DDTrace\Span;
-use DDTrace\Tags;
+use DDTrace\Tag;
 use DDTrace\Obfuscation;
 use DDTrace\Integrations\Integration;
 

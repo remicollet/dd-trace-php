@@ -2,15 +2,15 @@
 
 namespace DDTrace\Integrations\Laravel\V4;
 
-use DDTrace;
 use DDTrace\Configuration;
+use DDTrace\GlobalTracer;
 use DDTrace\StartSpanOptionsFactory;
-use DDTrace\Tags;
-use DDTrace\Types;
+use DDTrace\Tag;
+use DDTrace\Time;
+use DDTrace\Type;
 use DDTrace\Util\TryCatchFinally;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
-use DDTrace\GlobalTracer;
 
 /**
  * DataDog Laravel 4.2 tracing provider. Use by installing the dd-trace library:
@@ -71,7 +71,7 @@ class LaravelProvider extends ServiceProvider
             $startSpanOptions = StartSpanOptionsFactory::createForWebRequest(
                 $tracer,
                 [
-                    'start_time' => DDTrace\Time::now(),
+                    'start_time' => Time::now(),
                 ],
                 $request->header()
             );

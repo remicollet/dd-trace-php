@@ -2,8 +2,8 @@
 
 namespace DDTrace\Integrations\Predis;
 
-use DDTrace\Tags;
-use DDTrace\Types;
+use DDTrace\Tag;
+use DDTrace\Type;
 use DDTrace\Util\TryCatchFinally;
 use DDTrace\GlobalTracer;
 

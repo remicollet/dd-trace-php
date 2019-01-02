@@ -1,13 +1,8 @@
 <?php
 
-/**
- * Ported from opentracing/opentracing
- * @see https://github.com/opentracing/opentracing-php/blob/master/src/OpenTracing/Formats.php
- */
-
 namespace DDTrace;
 
-class Formats
+class Format
 {
     /**
      * Used a (single) arbitrary binary blob representing a SpanContext
@@ -40,13 +35,13 @@ class Formats
      * For example, Tracer::inject():
      *
      *    $headers = []
-     *    $tracer->inject($span->getContext(), Format::HTTP_HEADERS, $headers)
+     *    $tracer->inject($span->getContext(), Formats::HTTP_HEADERS, $headers)
      *    $request = new GuzzleHttp\Psr7\Request($uri, $body, $headers);
      *
      * Or Tracer::extract():
      *
      *    $headers = $request->getHeaders()
-     *    $clientContext = $tracer->extract(Format::HTTP_HEADERS, $headers)
+     *    $clientContext = $tracer->extract(Formats::HTTP_HEADERS, $headers)
      *
      * @see http://www.php-fig.org/psr/psr-7/#12-http-headers
      * @see http://php.net/manual/en/function.getallheaders.php

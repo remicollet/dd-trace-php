@@ -2,8 +2,8 @@
 
 namespace DDTrace\Integrations\Memcached;
 
-use DDTrace\Tags;
-use DDTrace\Types;
+use DDTrace\Tag;
+use DDTrace\Type;
 use DDTrace\Obfuscation;
 use DDTrace\Util\TryCatchFinally;
 use DDTrace\GlobalTracer;

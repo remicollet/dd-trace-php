@@ -2,7 +2,7 @@
 
 namespace DDTrace\Integrations;
 
-use DDTrace\Tags;
+use DDTrace\Tag;
 use DDTrace\Span;
 use DDTrace\GlobalTracer;
 

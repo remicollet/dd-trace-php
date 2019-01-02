@@ -2,8 +2,9 @@
 
 namespace DDTrace;
 
-class Tags
+class Tag
 {
+    // Generic
     const ENV = 'env';
     const SPAN_TYPE = 'span.type';
     const SERVICE_NAME = 'service.name';

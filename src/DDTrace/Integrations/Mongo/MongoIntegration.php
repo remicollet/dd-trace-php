@@ -3,8 +3,8 @@
 namespace DDTrace\Integrations\Mongo;
 
 use DDTrace\Span;
-use DDTrace\Tags;
-use DDTrace\Types;
+use DDTrace\Tag;
+use DDTrace\Type;
 use DDTrace\Integrations\Integration;
 
 final class MongoIntegration

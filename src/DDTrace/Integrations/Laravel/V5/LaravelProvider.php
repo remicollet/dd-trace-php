@@ -2,11 +2,13 @@
 
 namespace DDTrace\Integrations\Laravel\V5;
 
-use DDTrace;
 use DDTrace\Configuration;
 use DDTrace\StartSpanOptionsFactory;
-use DDTrace\Tags;
-use DDTrace\Types;
+use DDTrace\Tag;
+use DDTrace\Time;
+use DDTrace\Tracer;
+use DDTrace\Transport\Http;
+use DDTrace\Type;
 use DDTrace\Util\TryCatchFinally;
 use Illuminate\Foundation\Http\Events\RequestHandled;
 use Illuminate\Routing\Events\RouteMatched;

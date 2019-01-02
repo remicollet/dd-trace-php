@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file - [read more
 - Move framework tests to tests root folder #198
 - Move integrations tests to tests root folder #200
 - Removal of external dependencies to support auto-instrumentation #206
+- Migration from namespace based constants to class based constants for tags, formats and types #207
 
 ### Fixed
 - Properly set http status code tag in Laravel 4 integration #195

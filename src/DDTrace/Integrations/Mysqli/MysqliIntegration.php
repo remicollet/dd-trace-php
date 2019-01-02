@@ -2,8 +2,8 @@
 
 namespace DDTrace\Integrations\Mysqli;
 
-use DDTrace\Tags;
-use DDTrace\Types;
+use DDTrace\Tag;
+use DDTrace\Type;
 use DDTrace\Util\ObjectKVStore;
 use DDTrace\Util\TryCatchFinally;
 use DDTrace\GlobalTracer;

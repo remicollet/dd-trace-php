@@ -3,13 +3,13 @@
 namespace DDTrace;
 
 use DDTrace\Encoders\Json;
-use DDTrace\Formats;
+use DDTrace\Format;
 use DDTrace\Propagators\CurlHeadersMap;
 use DDTrace\Propagators\Noop as NoopPropagator;
 use DDTrace\Propagators\TextMap;
 use DDTrace\Sampling\AlwaysKeepSampler;
 use DDTrace\Sampling\Sampler;
-use DDTrace\Tags;
+use DDTrace\Tag;
 use DDTrace\Transport\Http;
 use DDTrace\Transport\Noop as NoopTransport;
 use DDTrace\Exceptions\UnsupportedFormat;
@@ -18,6 +18,8 @@ use DDTrace\Contracts\Tracer as TracerInterface;
 
 final class Tracer implements TracerInterface
 {
+    const VERSION = '0.8.1-beta';
+
     /**
      * @var Span[][]
      */

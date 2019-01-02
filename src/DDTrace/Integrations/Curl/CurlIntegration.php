@@ -3,11 +3,11 @@
 namespace DDTrace\Integrations\Curl;
 
 use DDTrace\Configuration;
-use DDTrace\Formats;
+use DDTrace\Format;
 use DDTrace\Http\Urls;
 use DDTrace\Span;
-use DDTrace\Tags;
-use DDTrace\Types;
+use DDTrace\Tag;
+use DDTrace\Type;
 use DDTrace\Util\ArrayKVStore;
 use DDTrace\GlobalTracer;
 
