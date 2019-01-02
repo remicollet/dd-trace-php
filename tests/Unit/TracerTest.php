@@ -29,7 +29,7 @@ final class TracerTest extends Framework\TestCase
     public function testCreateSpanSuccessWithExpectedValues()
     {
         $tracer = new Tracer(new NoopTransport());
-        $startTime = Time\now();
+        $startTime = Time::now();
         $span = $tracer->startSpan(self::OPERATION_NAME, [
             'tags' => [
                 self::TAG_KEY => self::TAG_VALUE

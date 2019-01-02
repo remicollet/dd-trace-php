@@ -80,11 +80,11 @@ class LaravelProvider extends ServiceProvider
             $rootScope = $tracer->startActiveSpan('laravel.request', $startSpanOptions);
 
             $requestSpan = $rootScope->getSpan();
-            $requestSpan->setTag(Tags::SERVICE_NAME, $appName);
-            $requestSpan->setTag(Tags::SPAN_TYPE, Types::WEB_SERVLET);
+            $requestSpan->setTag(Tag::SERVICE_NAME, $appName);
+            $requestSpan->setTag(Tag::SPAN_TYPE, Type::WEB_SERVLET);
 
             $response = call_user_func_array([$this, 'handle'], $args);
-            $requestSpan->setTag(Tags::HTTP_STATUS_CODE, $response->getStatusCode());
+            $requestSpan->setTag(Tag::HTTP_STATUS_CODE, $response->getStatusCode());
 
             return $response;
         });
@@ -95,11 +95,11 @@ class LaravelProvider extends ServiceProvider
             list($route, $request) = $args;
             $span = $rootScope->getSpan();
 
-            $span->setTag(Tags::RESOURCE_NAME, $route->getActionName() . ' ' . Route::currentRouteName());
+            $span->setTag(Tag::RESOURCE_NAME, $route->getActionName() . ' ' . Route::currentRouteName());
             $span->setTag('laravel.route.name', $route->getName());
             $span->setTag('laravel.route.action', $route->getActionName());
-            $span->setTag(Tags::HTTP_METHOD, $request->method());
-            $span->setTag(Tags::HTTP_URL, $request->url());
+            $span->setTag(Tag::HTTP_METHOD, $request->method());
+            $span->setTag(Tag::HTTP_URL, $request->url());
         });
 
         dd_trace('Illuminate\Routing\Route', 'run', function () {
@@ -130,9 +130,9 @@ class LaravelProvider extends ServiceProvider
     {
         $scope = GlobalTracer::get()->startActiveSpan($operation);
         $span = $scope->getSpan();
-        $span->setTag(Tags::SPAN_TYPE, Types::WEB_SERVLET);
-        $span->setTag(Tags::SERVICE_NAME, self::getAppName());
-        $span->setTag(Tags::RESOURCE_NAME, $resource);
+        $span->setTag(Tag::SPAN_TYPE, Type::WEB_SERVLET);
+        $span->setTag(Tag::SERVICE_NAME, self::getAppName());
+        $span->setTag(Tag::RESOURCE_NAME, $resource);
 
         return $scope;
     }

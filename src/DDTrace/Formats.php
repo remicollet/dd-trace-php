@@ -40,13 +40,13 @@ class Formats
      * For example, Tracer::inject():
      *
      *    $headers = []
-     *    $tracer->inject($span->getContext(), Formats::HTTP_HEADERS, $headers)
+     *    $tracer->inject($span->getContext(), Format::HTTP_HEADERS, $headers)
      *    $request = new GuzzleHttp\Psr7\Request($uri, $body, $headers);
      *
      * Or Tracer::extract():
      *
      *    $headers = $request->getHeaders()
-     *    $clientContext = $tracer->extract(Formats::HTTP_HEADERS, $headers)
+     *    $clientContext = $tracer->extract(Format::HTTP_HEADERS, $headers)
      *
      * @see http://www.php-fig.org/psr/psr-7/#12-http-headers
      * @see http://php.net/manual/en/function.getallheaders.php
