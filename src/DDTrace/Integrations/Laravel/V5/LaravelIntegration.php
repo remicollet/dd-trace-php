@@ -6,6 +6,8 @@ class LaravelIntegration
 {
     public static function load()
     {
-        error_log("Loading laravel 5");
+        dd_trace('Illuminate\Foundation\ProviderRepository', 'load', function(array $providers) {
+            return $this->load(array_merge($providers, ['DDTrace\Integrations\Laravel\V5\LaravelProvider']));
+        });
     }
 }
