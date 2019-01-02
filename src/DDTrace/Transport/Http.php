@@ -4,6 +4,8 @@ namespace DDTrace\Transport;
 
 use DDTrace\Configuration;
 use DDTrace\Encoder;
+use DDTrace\Log\Logger;
+use DDTrace\Log\LoggerInterface;
 use DDTrace\Sampling\PrioritySampling;
 use DDTrace\Tracer;
 use DDTrace\Transport;
@@ -42,11 +44,12 @@ final class Http implements Transport
      */
     private $logger;
 
-    public function __construct(Encoder $encoder, array $config = [])
+    public function __construct(Encoder $encoder, LoggerInterface $logger, array $config = [])
     {
         $this->configure($config);
 
         $this->encoder = $encoder;
+        $this->logger = $logger ?: Logger::get();
 
         $this->setHeader('Datadog-Meta-Lang', 'php');
         $this->setHeader('Datadog-Meta-Lang-Version', \PHP_VERSION);
