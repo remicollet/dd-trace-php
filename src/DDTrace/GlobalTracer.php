@@ -37,9 +37,14 @@ final class GlobalTracer
      */
     public static function get()
     {
-        if (null !== self::$instance) {
+        if (self::isDefined()) {
             return self::$instance;
         }
         return self::$instance = NoopTracer::create();
+    }
+
+    public static function isDefined()
+    {
+        return null !== self::$instance;
     }
 }

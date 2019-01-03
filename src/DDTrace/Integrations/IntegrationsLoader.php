@@ -47,10 +47,10 @@ class IntegrationsLoader
      */
     public static function load()
     {
-        if (self::$loaded) {
-            return;
-        }
-        self::$loaded = true;
+//        if (self::$loaded) {
+//            return;
+//        }
+//        self::$loaded = true;
 
         $globalConfig = Configuration::get();
 

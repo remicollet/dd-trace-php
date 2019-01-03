@@ -5,10 +5,11 @@ namespace DDTrace\Integrations\Symfony;
 class SymfonyIntegration
 {
     const NAME = 'symfony';
+    const BUNDLE_NAME = 'datadog_symfony_bundle';
 
     public static function load()
     {
-        if (!defined('\Symfony\Component\HttpKernel\Kernel::VERSION')) {
+        if (!defined('Symfony\Component\HttpKernel\Kernel::VERSION')) {
             return false;
         }
 

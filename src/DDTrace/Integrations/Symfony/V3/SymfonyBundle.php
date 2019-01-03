@@ -5,6 +5,7 @@ namespace DDTrace\Integrations\Symfony\V3;
 use DDTrace\Configuration;
 use DDTrace\Encoders\Json;
 use DDTrace\Integrations\IntegrationsLoader;
+use DDTrace\Integrations\Symfony\SymfonyIntegration;
 use DDTrace\Span;
 use DDTrace\Tag;
 use DDTrace\Tracer;
@@ -32,6 +33,11 @@ use Symfony\Component\HttpKernel\KernelEvents;
 class SymfonyBundle extends Bundle
 {
     const NAME = 'symfony';
+
+    /**
+     * @var string Used by Bundle::getName() to identify this bundle among registered ones.
+     */
+    protected $name = SymfonyIntegration::BUNDLE_NAME;
 
     public function boot()
     {
@@ -140,9 +146,6 @@ class SymfonyBundle extends Bundle
                 return TryCatchFinally::executePublicMethod($scope, $this, 'dispatch', $args);
             }
         );
-
-        // Enable other integrations
-        IntegrationsLoader::load();
 
         // Tracing templating engines
         $renderTraceCallback = function () use ($appName) {
