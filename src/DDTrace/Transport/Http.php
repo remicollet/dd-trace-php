@@ -10,7 +10,6 @@ use DDTrace\Log\Logger;
 use DDTrace\Log\LoggerInterface;
 use DDTrace\Sampling\PrioritySampling;
 use DDTrace\Transport;
-use DDTrace\Version;
 
 final class Http implements Transport
 {

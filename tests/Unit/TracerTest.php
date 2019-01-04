@@ -39,6 +39,7 @@ final class TracerTest extends Framework\TestCase
 
     /**
      * @dataProvider tracerImplementations
+     * @param TracerInterface $tracer
      */
     public function testCreateSpanSuccessWithExpectedValues(TracerInterface $tracer)
     {
