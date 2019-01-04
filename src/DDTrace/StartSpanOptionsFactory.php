@@ -24,7 +24,7 @@ class StartSpanOptionsFactory
         $globalConfiguration = Configuration::get();
 
         if ($globalConfiguration->isDistributedTracingEnabled()
-                && $spanContext = $tracer->extract(Formats\HTTP_HEADERS, $headers)) {
+                && $spanContext = $tracer->extract(Format::HTTP_HEADERS, $headers)) {
             $options[Reference::CHILD_OF] = $spanContext;
         }
 

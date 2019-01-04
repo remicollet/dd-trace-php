@@ -3,13 +3,13 @@
 namespace DDTrace;
 
 use DDTrace\Encoders\Json;
-use DDTrace\Formats;
+use DDTrace\Format;
 use DDTrace\Propagators\CurlHeadersMap;
 use DDTrace\Propagators\Noop as NoopPropagator;
 use DDTrace\Propagators\TextMap;
 use DDTrace\Sampling\AlwaysKeepSampler;
 use DDTrace\Sampling\Sampler;
-use DDTrace\Tags;
+use DDTrace\Tag;
 use DDTrace\Transport\Http;
 use DDTrace\Transport\Noop as NoopTransport;
 use DDTrace\Exceptions\UnsupportedFormat;
@@ -18,6 +18,8 @@ use DDTrace\Contracts\Tracer as TracerInterface;
 
 final class Tracer implements TracerInterface
 {
+    const VERSION = '0.8.1-beta';
+
     /**
      * @var Span[][]
      */
@@ -80,9 +82,9 @@ final class Tracer implements TracerInterface
         $this->transport = $transport ?: new Http(new Json());
         $textMapPropagator = new TextMap($this);
         $this->propagators = $propagators ?: [
-            Formats\TEXT_MAP => $textMapPropagator,
-            Formats\HTTP_HEADERS => $textMapPropagator,
-            Formats\CURL_HTTP_HEADERS => new CurlHeadersMap($this),
+            Format::TEXT_MAP => $textMapPropagator,
+            Format::HTTP_HEADERS => $textMapPropagator,
+            Format::CURL_HTTP_HEADERS => new CurlHeadersMap($this),
         ];
         $this->scopeManager = new ScopeManager();
         $this->config = array_merge($this->config, $config);
@@ -98,9 +100,9 @@ final class Tracer implements TracerInterface
         return new self(
             new NoopTransport(),
             [
-                Formats\BINARY => new NoopPropagator(),
-                Formats\TEXT_MAP => new NoopPropagator(),
-                Formats\HTTP_HEADERS => new NoopPropagator(),
+                Format::BINARY => new NoopPropagator(),
+                Format::TEXT_MAP => new NoopPropagator(),
+                Format::HTTP_HEADERS => new NoopPropagator(),
             ],
             ['enabled' => false]
         );
@@ -139,7 +141,7 @@ final class Tracer implements TracerInterface
 
         $tags = $options->getTags() + $this->config['global_tags'];
         if ($reference === null) {
-            $tags[Tags\PID] = getmypid();
+            $tags[Tag::PID] = getmypid();
         }
 
         foreach ($tags as $key => $value) {
@@ -165,14 +167,14 @@ final class Tracer implements TracerInterface
         if (($activeSpan = $this->getActiveSpan()) !== null) {
             $options = $options->withParent($activeSpan);
             $tags = $options->getTags();
-            if (!array_key_exists(Tags\SERVICE_NAME, $tags)) {
+            if (!array_key_exists(Tag::SERVICE_NAME, $tags)) {
                 $parentService = $activeSpan->getService();
             }
         }
 
         $span = $this->startSpan($operationName, $options);
         if ($parentService !== null) {
-            $span->setTag(Tags\SERVICE_NAME, $parentService);
+            $span->setTag(Tag::SERVICE_NAME, $parentService);
         }
 
         return $this->scopeManager->activate($span, $options->shouldFinishSpanOnClose());
