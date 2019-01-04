@@ -14,6 +14,8 @@ use DDTrace\StartSpanOptions;
 
 interface Tracer
 {
+    const VERSION = '0.8.1-beta';
+
     /**
      * Returns the current {@link ScopeManager}, which may be a noop but may not be null.
      *
@@ -41,7 +43,7 @@ interface Tracer
      *     ]);
      *     $span = $scope->getSpan();
      *     try {
-     *         $span->setTag(Tag::HTTP_METHOD, 'GET');
+     *         $span->setTag(Tags\HTTP_METHOD, 'GET');
      *         // ...
      *     } finally {
      *         $scope->close();
@@ -123,5 +125,8 @@ interface Tracer
      */
     public function flush();
 
-    public function reset();
+    /**
+     * @return mixed
+     */
+    public function getPrioritySampling();
 }

@@ -12,6 +12,12 @@ use DDTrace\Tracer;
 use GuzzleHttp\Client;
 use GuzzleHttp\Message\Request;
 use GuzzleHttp\Ring\Client\MockHandler;
+<<<<<<< HEAD:tests/Integrations/Guzzle/v5/GuzzleIntegrationTest.php
+=======
+use DDTrace\Tests\Common\SpanAssertion;
+use DDTrace\Tests\Common\IntegrationTestCase;
+use DDTrace\GlobalTracer;
+>>>>>>> ba1e836d133dec6cf9bcef855746e5bcbd230010:tests/Integrations/Guzzle/V5/GuzzleIntegrationTest.php
 
 final class GuzzleIntegrationTest extends IntegrationTestCase
 {

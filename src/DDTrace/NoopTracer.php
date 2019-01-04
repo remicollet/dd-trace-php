@@ -72,7 +72,11 @@ final class NoopTracer implements TracerInterface
     {
     }
 
-    public function reset()
+    /**
+     * {@inheritdoc}
+     */
+    public function getPrioritySampling()
     {
+        return null;
     }
 }

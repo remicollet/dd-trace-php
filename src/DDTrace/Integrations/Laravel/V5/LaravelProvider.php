@@ -3,18 +3,17 @@
 namespace DDTrace\Integrations\Laravel\V5;
 
 use DDTrace\Configuration;
+use DDTrace\GlobalTracer;
 use DDTrace\StartSpanOptionsFactory;
 use DDTrace\Tag;
 use DDTrace\Time;
-use DDTrace\Tracer;
-use DDTrace\Transport\Http;
 use DDTrace\Type;
 use DDTrace\Util\TryCatchFinally;
 use Illuminate\Foundation\Http\Events\RequestHandled;
 use Illuminate\Routing\Events\RouteMatched;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
-use DDTrace\GlobalTracer;
+use Illuminate\View\Engines\CompilerEngine;
 
 /**
  * DataDog Laravel tracing provider. Use by installing the dd-trace library:

@@ -2,7 +2,6 @@
 
 namespace DDTrace;
 
-use DDTrace\Formats;
 use DDTrace\Contracts\Tracer as TracerInterface;
 
 /**

@@ -3,12 +3,12 @@
 namespace DDTrace\Transport;
 
 use DDTrace\Configuration;
+use DDTrace\Contracts\Tracer;
 use DDTrace\Encoder;
 use DDTrace\GlobalTracer;
 use DDTrace\Log\Logger;
 use DDTrace\Log\LoggerInterface;
 use DDTrace\Sampling\PrioritySampling;
-use DDTrace\Tracer;
 use DDTrace\Transport;
 
 final class Http implements Transport

@@ -2,6 +2,8 @@
 
 namespace DDTrace\Tests\Unit;
 
+use DDTrace\Contracts\Tracer as TracerInterface;
+use DDTrace\OpenTracer\Tracer as OpenTracer;
 use DDTrace\Sampling\PrioritySampling;
 use DDTrace\SpanContext;
 use DDTrace\Tag;
@@ -9,6 +11,7 @@ use DDTrace\Tests\DebugTransport;
 use DDTrace\Time;
 use DDTrace\Tracer;
 use DDTrace\Transport\Noop as NoopTransport;
+use OpenTracing\Mock\MockTracer;
 use PHPUnit\Framework;
 
 final class TracerTest extends Framework\TestCase
@@ -19,6 +22,14 @@ final class TracerTest extends Framework\TestCase
     const TAG_VALUE = 'test_value';
     const FORMAT = 'test_format';
 
+    public function tracerImplementations()
+    {
+        return [
+            [new Tracer(new NoopTransport())],
+            [new OpenTracer(new MockTracer())],
+        ];
+    }
+
     public function testStartSpanAsNoop()
     {
         $tracer = Tracer::noop();
@@ -26,9 +37,12 @@ final class TracerTest extends Framework\TestCase
         $this->assertInstanceOf('DDTrace\NoopSpan', $span);
     }
 
-    public function testCreateSpanSuccessWithExpectedValues()
+    /**
+     * @dataProvider tracerImplementations
+     * @param TracerInterface $tracer
+     */
+    public function testCreateSpanSuccessWithExpectedValues(TracerInterface $tracer)
     {
-        $tracer = new Tracer(new NoopTransport());
         $startTime = Time::now();
         $span = $tracer->startSpan(self::OPERATION_NAME, [
             'tags' => [
@@ -79,9 +93,11 @@ final class TracerTest extends Framework\TestCase
         $this->assertEquals($parentScope->getSpan()->getService(), $childScope->getSpan()->getService());
     }
 
+    /**
+     * @expectedException \DDTrace\Exceptions\UnsupportedFormat
+     */
     public function testInjectThrowsUnsupportedFormatException()
     {
-        $this->expectException('DDTrace\Exceptions\UnsupportedFormat');
         $context = SpanContext::createAsRoot();
         $carrier = [];
 
@@ -100,9 +116,11 @@ final class TracerTest extends Framework\TestCase
         $tracer->inject($context, self::FORMAT, $carrier);
     }
 
+    /**
+     * @expectedException \DDTrace\Exceptions\UnsupportedFormat
+     */
     public function testExtractThrowsUnsupportedFormatException()
     {
-        $this->expectException('DDTrace\Exceptions\UnsupportedFormat');
         $carrier = [];
         $tracer = new Tracer(new NoopTransport());
         $tracer->extract(self::FORMAT, $carrier);
