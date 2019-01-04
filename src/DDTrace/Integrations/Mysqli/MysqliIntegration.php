@@ -6,7 +6,7 @@ use DDTrace\Tags;
 use DDTrace\Types;
 use DDTrace\Util\ObjectKVStore;
 use DDTrace\Util\TryCatchFinally;
-use OpenTracing\GlobalTracer;
+use DDTrace\GlobalTracer;
 
 class MysqliIntegration
 {
@@ -343,7 +343,7 @@ class MysqliIntegration
      *
      * @param string $operationName
      * @param string $resource
-     * @return \OpenTracing\Scope
+     * @return \DDTrace\Contracts\Scope
      */
     public static function initScope($operationName, $resource)
     {
@@ -359,7 +359,7 @@ class MysqliIntegration
     /**
      * Set connection info into an existing span.
      *
-     * @param \OpenTracing\Span $span
+     * @param \DDTrace\Contracts\Span $span
      * @param $mysqli
      */
     public static function setConnectionInfo($span, $mysqli)

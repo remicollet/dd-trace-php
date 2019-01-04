@@ -5,11 +5,10 @@ namespace DDTrace\Transport;
 use DDTrace\Configuration;
 use DDTrace\Encoder;
 use DDTrace\Sampling\PrioritySampling;
-use DDTrace\Span;
-use DDTrace\Tracer;
+use DDTrace\Contracts\Tracer;
 use DDTrace\Transport;
 use DDTrace\Version;
-use OpenTracing\GlobalTracer;
+use DDTrace\GlobalTracer;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 
