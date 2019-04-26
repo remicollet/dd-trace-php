@@ -8,7 +8,7 @@
 namespace DDTrace;
 
 use DDTrace\Integrations\Integration;
-use DDTrace\Contracts\Scope;
+use DDTrace\Contracts\Scope as ScopeInterface;
 use DDTrace\Contracts\Span as SpanInterface;
 use DDTrace\Contracts\SpanContext as SpanContextInterface;
 use DDTrace\Contracts\Tracer as TracerInterface;
@@ -85,6 +85,13 @@ final class NoopTracer implements TracerInterface
     /**
      * {@inheritdoc}
      */
+    public function setPrioritySampling($prioritySampling)
+    {
+    }
+
+    /**
+     * {@inheritdoc}
+     */
     public function startRootSpan($operationName, $options = [])
     {
         return NoopScope::create();
@@ -115,7 +122,7 @@ final class NoopTracer implements TracerInterface
      * @param Integration $integration
      * @param string $operationName
      * @param array $options
-     * @return Scope
+     * @return ScopeInterface
      */
     public function startIntegrationScopeAndSpan(Integration $integration, $operationName, $options = [])
     {

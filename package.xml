@@ -10,10 +10,10 @@
         <email>sammyk@php.net</email>
         <active>yes</active>
     </lead>
-    <date>2019-04-08</date>
+    <date>2019-04-25</date>
     <version>
-        <release>0.18.0</release>
-        <api>0.18.0</api>
+        <release>0.20.0</release>
+        <api>0.20.0</api>
     </version>
     <stability>
         <release>stable</release>
@@ -21,20 +21,11 @@
     </stability>
     <license uri="https://github.com/DataDog/dd-trace-php/blob/master/LICENSE">BSD 3-Clause</license>
     <notes>
-        **NOTE: THIS IS A BREAKING CHANGE RELEASE**
+### Added
+- Force tracing or discarding trace via special Span tag (manual.keep and manual.drop) #409
 
-        This change should not impact most users.
-
-        ### Added
-        - MessagePack serialization for traces sent to the Agent with a new function `dd_trace_serialize_msgpack()` #378
-
-        ### Changed
-        - Request init hook module blacklist now avoids miss matching partial matches #372
-        - Add 10MB cap to payloads sent to the Agent #388
-        - Added an `getTracesAsArray()` method to `DDTrace/Contracts/Tracer` which returns an array of spans (which are also encoded as an array.) To encode an instance of `DDTrace\Contracts\Span` as an array, use `DDTrace/Encoders/SpanEncoder::encode($span)` #378
-        - `DDTrace/Transport::send()` now takes an instance of `DDTrace/Contracts/Tracer` instead of an `array` #378
-        - `DDTrace/Encoder::encodeTraces()` now takes an instance of `DDTrace/Contracts/Tracer` instead of an `array` #378
-        - The default encoder is now `DDTrace/Encoders/MessagePack`. You can still use the JSON encoder by setting the environment variable `DD_TRACE_ENCODER=json`. It is generally not recommended to use the JSON encoder as parsing JSON payloads at the Agent level is more CPU &amp; memory intensive.
+### Fixed
+- Resource use by caching configuration values instead of processing data on every access #406
     </notes>
     <contents>
         <dir name="/">
@@ -63,6 +54,14 @@
                     <file name="serializer.c" role="src" />
                     <file name="serializer.h" role="src" />
                     <file name="version.h" role="src" />
+                    <dir name="mpack">
+                        <file name="AUTHORS.md" role="doc" />
+                        <file name="CHANGELOG.md" role="doc" />
+                        <file name="README.md" role="doc" />
+                        <file name="LICENSE" role="doc" />
+                        <file name="mpack.c" role="src" />
+                        <file name="mpack.h" role="src" />
+                    </dir>
                 </dir>
             </dir>
             <dir name="tests">
@@ -74,6 +73,9 @@
                     <file name="closure_accessing_outside_variables.phpt" role="test" />
                     <file name="closure_set_inside_object_methods.phpt" role="test" />
                     <file name="dd_trace_serialize_msgpack.phpt" role="test" />
+                    <file name="dd_trace_serialize_msgpack_error.phpt" role="test" />
+                    <file name="dd_trace_serialize_msgpack_error_strict.phpt" role="test" />
+                    <file name="disable_tracing_disables_tracing.phpt" role="test" />
                     <file name="do_not_check_if_class_or_function_exists_by_default.phpt" role="test" />
                     <file name="enable_throw_exception_if_overridable_doesnt_exist.phpt" role="test" />
                     <file name="method_invoked_via_reflection.phpt" role="test" />
@@ -86,17 +88,24 @@
                     <file name="private_self_access.phpt" role="test" />
                     <file name="protected_method_hook.phpt" role="test" />
                     <file name="recursion.phpt" role="test" />
+                    <file name="request_init_hook_check_blacklisted_modules.phpt" role="test" />
                     <file name="request_init_hook_file_not_found.phpt" role="test" />
                     <file name="reset_configured_overrides.phpt" role="test" />
                     <file name="reset_function_tracing.phpt" role="test" />
                     <file name="return_value_passed.phpt" role="test" />
                     <file name="run_file_before_request_handling.phpt" role="test" />
+                    <file name="segfault_backtrace_disabled.phpt" role="test" />
+                    <file name="segfault_backtrace_disabled_via_env_enabled_in_ini.phpt" role="test" />
+                    <file name="segfault_backtrace_enabled.phpt" role="test" />
+                    <file name="segfault_backtrace_enabled_via_env_disabled_in_ini.phpt" role="test" />
+                    <file name="segfault_backtrace_enabled_via_env.phpt" role="test" />
                     <file name="simple_function_hook.phpt" role="test" />
                     <file name="simple_method_hook.phpt" role="test" />
                     <file name="simple_sanity_check.phpt" role="test" />
                     <file name="throw_exception.phpt" role="test" />
                     <file name="trace_method_or_function_that_will_exist_later.phpt" role="test" />
                     <file name="trace_static_method.phpt" role="test" />
+                    <file name="used_dispatch_shouldn_t_be_freed.phpt" role="test" />
                     <file name="variable_length_parameter_list.phpt" role="test" />
                     <file name="with_params_function_hook.phpt" role="test" />
                     <file name="with_params_method_hook.phpt" role="test" />

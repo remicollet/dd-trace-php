@@ -3,8 +3,7 @@ dd_trace_serialize_msgpack() error conditions
 --FILE--
 <?php
 array_map(function ($data) {
-    echo json_encode($data) . ' -> ';
-    var_dump(dd_trace_serialize_msgpack($data));
+    var_dump($data, dd_trace_serialize_msgpack($data));
     echo "\n";
 }, [
     true,
@@ -13,11 +12,24 @@ array_map(function ($data) {
     ['bar', stream_context_create()],
 ]);
 ?>
---EXPECT--
-true -> bool(false)
+--EXPECTF--
+bool(true)
+bool(false)
 
-"foo" -> bool(false)
+string(3) "foo"
+bool(false)
 
-[{}] -> bool(false)
+array(1) {
+  [0]=>
+  object(stdClass)#%d (0) {
+  }
+}
+bool(false)
 
- -> bool(false)
+array(2) {
+  [0]=>
+  string(3) "bar"
+  [1]=>
+  resource(%d) of type (stream-context)
+}
+bool(false)
