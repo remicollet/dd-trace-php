@@ -6,7 +6,6 @@ use DDTrace\Integrations\Integration;
 use DDTrace\Tag;
 use DDTrace\Type;
 use DDTrace\GlobalTracer;
-use DDTrace\Util\TryCatchFinally;
 use Predis\Configuration\OptionsInterface;
 use Predis\Pipeline\Pipeline;
 
@@ -55,20 +54,25 @@ class PredisIntegration extends Integration
     {
         // public Predis\Client::__construct ([ mixed $dsn [, mixed $options ]] )
         dd_trace('Predis\Client', '__construct', function () {
-            $args = func_get_args();
-            $scope = GlobalTracer::get()->startIntegrationScopeAndSpan(
+            $tracer = GlobalTracer::get();
+            if ($tracer->limited()) {
+                return dd_trace_forward_call();
+            }
+
+            $scope = $tracer->startIntegrationScopeAndSpan(
                 PredisIntegration::getInstance(),
                 'Predis.Client.__construct'
             );
             $span = $scope->getSpan();
+
             $span->setTag(Tag::SPAN_TYPE, Type::CACHE);
             $span->setTag(Tag::SERVICE_NAME, 'redis');
             $span->setTag(Tag::RESOURCE_NAME, 'Predis.Client.__construct');
 
             $thrown = null;
             try {
-                call_user_func_array([$this, '__construct'], $args);
-                PredisIntegration::storeConnectionParams($this, $args);
+                dd_trace_forward_call();
+                PredisIntegration::storeConnectionParams($this, func_get_args());
                 PredisIntegration::setConnectionTags($this, $span);
             } catch (\Exception $e) {
                 $thrown = $e;
@@ -85,7 +89,12 @@ class PredisIntegration extends Integration
 
         // public void Predis\Client::connect()
         dd_trace('Predis\Client', 'connect', function () {
-            $scope = GlobalTracer::get()->startIntegrationScopeAndSpan(
+            $tracer = GlobalTracer::get();
+            if ($tracer->limited()) {
+                return dd_trace_forward_call();
+            }
+
+            $scope = $tracer->startIntegrationScopeAndSpan(
                 PredisIntegration::getInstance(),
                 'Predis.Client.connect'
             );
@@ -95,16 +104,21 @@ class PredisIntegration extends Integration
             $span->setTag(Tag::RESOURCE_NAME, 'Predis.Client.connect');
             PredisIntegration::setConnectionTags($this, $span);
 
-            return TryCatchFinally::executePublicMethod($scope, $this, 'connect', []);
+            return include __DIR__ . '/../../try_catch_finally.php';
         });
 
         // public mixed Predis\Client::executeCommand(CommandInterface $command)
         dd_trace('Predis\Client', 'executeCommand', function ($command) {
+            $tracer = GlobalTracer::get();
+            if ($tracer->limited()) {
+                return dd_trace_forward_call();
+            }
+
             $arguments = $command->getArguments();
             array_unshift($arguments, $command->getId());
             $query = PredisIntegration::formatArguments($arguments);
 
-            $scope = GlobalTracer::get()->startIntegrationScopeAndSpan(
+            $scope = $tracer->startIntegrationScopeAndSpan(
                 PredisIntegration::getInstance(),
                 'Predis.Client.executeCommand'
             );
@@ -117,14 +131,19 @@ class PredisIntegration extends Integration
             $span->setTraceAnalyticsCandidate();
             PredisIntegration::setConnectionTags($this, $span);
 
-            return TryCatchFinally::executePublicMethod($scope, $this, 'executeCommand', [$command]);
+            return include __DIR__ . '/../../try_catch_finally.php';
         });
 
         // public mixed Predis\Client::executeRaw(array $arguments, bool &$error)
         dd_trace('Predis\Client', 'executeRaw', function ($arguments, &$error = null) {
+            $tracer = GlobalTracer::get();
+            if ($tracer->limited()) {
+                return dd_trace_forward_call();
+            }
+
             $query = PredisIntegration::formatArguments($arguments);
 
-            $scope = GlobalTracer::get()->startIntegrationScopeAndSpan(
+            $scope = $tracer->startIntegrationScopeAndSpan(
                 PredisIntegration::getInstance(),
                 'Predis.Client.executeRaw'
             );
@@ -143,7 +162,7 @@ class PredisIntegration extends Integration
             $thrown = null;
             $result = null;
             try {
-                $result = $this->executeRaw($arguments, $error);
+                $result = dd_trace_forward_call();
             } catch (\Exception $ex) {
                 $thrown = $ex;
                 $span->setError($ex);
@@ -159,7 +178,12 @@ class PredisIntegration extends Integration
 
         // protected array Predis\Pipeline::executePipeline(ConnectionInterface $connection, \SplQueue $commands)
         dd_trace('Predis\Pipeline\Pipeline', 'executePipeline', function ($connection, $commands) {
-            $scope = GlobalTracer::get()->startIntegrationScopeAndSpan(
+            $tracer = GlobalTracer::get();
+            if ($tracer->limited()) {
+                return dd_trace_forward_call();
+            }
+
+            $scope = $tracer->startIntegrationScopeAndSpan(
                 PredisIntegration::getInstance(),
                 'Predis.Pipeline.executePipeline'
             );
@@ -176,7 +200,7 @@ class PredisIntegration extends Integration
             $result = null;
             $span = $scope->getSpan();
             try {
-                $result = $this->executePipeline($connection, $commands);
+                $result = dd_trace_forward_call();
             } catch (\Exception $ex) {
                 $thrown = $ex;
                 $span->setError($ex);

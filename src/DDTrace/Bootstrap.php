@@ -2,12 +2,9 @@
 
 namespace DDTrace;
 
-use DDTrace\Encoders\Json;
-use DDTrace\Encoders\MessagePack;
 use DDTrace\Http\Request;
 use DDTrace\Integrations\IntegrationsLoader;
 use DDTrace\Integrations\Web\WebIntegration;
-use DDTrace\Transport\Http;
 
 /**
  * Bootstrap the the datadog tracer.
@@ -95,7 +92,7 @@ final class Bootstrap
                 $options,
                 Request::getHeaders()
             );
-        $operationName = 'cli' === PHP_SAPI ? 'cli.command' : 'web.request';
+        $operationName = 'cli' === PHP_SAPI ? basename($_SERVER['argv'][0]) : 'web.request';
         $span = $tracer->startRootSpan($operationName, $startSpanOptions)->getSpan();
         $span->setIntegration(WebIntegration::getInstance());
         $span->setTraceAnalyticsCandidate();

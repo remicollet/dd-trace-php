@@ -3,8 +3,8 @@
 namespace DDTrace\Integrations;
 
 use DDTrace\Configuration;
+use DDTrace\Contracts\Span;
 use DDTrace\Tag;
-use DDTrace\Span;
 use DDTrace\GlobalTracer;
 
 abstract class Integration
@@ -122,8 +122,12 @@ abstract class Integration
             $postCallHook,
             $integration
         ) {
-            $args = func_get_args();
-            $scope = GlobalTracer::get()->startActiveSpan($className . '.' . $method);
+            $tracer = GlobalTracer::get();
+            if ($tracer->limited()) {
+                return dd_trace_forward_call();
+            }
+
+            $scope = $tracer->startActiveSpan($className . '.' . $method);
             $span = $scope->getSpan();
 
             if (null !== $integration) {
@@ -132,13 +136,13 @@ abstract class Integration
 
             $integrationClass::setDefaultTags($span, $method);
             if (null !== $preCallHook) {
-                $preCallHook($span, $args);
+                $preCallHook($span, func_get_args());
             }
 
             $returnVal = null;
             $thrownException = null;
             try {
-                $returnVal = call_user_func_array([$this, $method], $args);
+                $returnVal = dd_trace_forward_call();
             } catch (\Exception $e) {
                 $span->setError($e);
                 $thrownException = $e;
@@ -171,14 +175,11 @@ abstract class Integration
      */
     protected static function shouldLoad($name)
     {
-        if ('cli' === PHP_SAPI && 'dd_testing' !== getenv('APP_ENV')) {
-            return false;
-        }
         if (!Configuration::get()->isIntegrationEnabled($name)) {
             return false;
         }
         if (!extension_loaded('ddtrace')) {
-            trigger_error('ddtrace extension required to load Laravel integration.', E_USER_WARNING);
+            trigger_error('ddtrace extension required to load integration.', E_USER_WARNING);
             return false;
         }
 

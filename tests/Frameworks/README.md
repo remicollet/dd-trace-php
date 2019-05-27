@@ -8,11 +8,21 @@ The test frameworks must support the following routes/endpoints in order to exec
 * `/simple_view`: GET request that renders a view
 * `/error`: GET request that throws an exception (returns a **500** response)
 
+## CakePHP
+
+In order to generate the sample CakePHP apps we installed it as a new project [using Composer](https://packagist.org/packages/cakephp/cakephp).
+
+    $ cd tests/Frameworks/CakePHP
+
+### CakePHP 2.8
+
+    $ composer create-project cakephp/cakephp Version_2_8 2.8.*
+
 ## Laravel
 
 In order to generate the sample Laravel apps we used the default commands from the framework's 'Getting started' guides.
 
-    $ cd tests/Integration/Frameworks/Laravel
+    $ cd tests/Frameworks/Laravel
 
 ### Laravel 4.2
 
@@ -31,6 +41,40 @@ Link: https://laravel.com/docs/5.8/installation
 Link: https://laravel.com/docs/5.7/installation
 
     $ composer create-project --prefer-dist laravel/laravel Version_5_7 5.7.*
+
+## Lumen
+
+In order to generate the sample Lumen apps we used the default commands from the framework's 'Getting started' guides.
+
+    $ cd tests/Frameworks/Lumen
+
+### Lumen 5.2
+
+Link: https://lumen.laravel.com/docs/5.2/installation
+
+    $ composer create-project laravel/lumen Version_5_2 "5.2.*"
+
+### Lumen 5.6
+
+Link: https://lumen.laravel.com/docs/5.6/installation
+
+    $ composer create-project laravel/lumen Version_5_6 "5.6.*"
+
+### Lumen 5.8
+
+Link: https://lumen.laravel.com/docs/5.8/installation
+
+    $ composer create-project laravel/lumen Version_5_8 "5.8.*"
+
+## Slim Framework
+
+In order to generate the sample Slim Framework apps we used the default commands from the [framework's 'Getting started' guide](http://www.slimframework.com/).
+
+    $ cd tests/Frameworks/Slim
+
+### Slim 3.12
+
+    $ composer create-project slim/slim-skeleton Version_3_12 "3.12.*"
 
 ## Symfony
 

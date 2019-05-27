@@ -4,6 +4,7 @@ namespace DDTrace;
 
 use DDTrace\Encoders\Json;
 use DDTrace\Encoders\SpanEncoder;
+use DDTrace\Http\Urls;
 use DDTrace\Integrations\Integration;
 use DDTrace\Encoders\MessagePack;
 use DDTrace\Log\LoggingTrait;
@@ -25,7 +26,7 @@ final class Tracer implements TracerInterface
 {
     use LoggingTrait;
 
-    const VERSION = '0.20.0';
+    const VERSION = '0.24.0';
 
     /**
      * @var Span[][]
@@ -61,11 +62,22 @@ final class Tracer implements TracerInterface
          * Enabled, when false, returns a no-op implementation of the Tracer.
          */
         'enabled' => true,
-        /** GlobalTags holds a set of tags that will be automatically applied to
+        /**
+         * GlobalTags holds a set of tags that will be automatically applied to
          * all spans.
          */
         'global_tags' => [],
     ];
+
+    /**
+     * @var int
+     * */
+    private $spansCreated = 0;
+
+    /**
+     * @var int
+     * */
+    private $spansLimit = -1;
 
     /**
      * @var ScopeManager
@@ -113,6 +125,15 @@ final class Tracer implements TracerInterface
         $this->traceAnalyticsProcessor = new TraceAnalyticsProcessor();
     }
 
+    public function limited()
+    {
+        if ($this->spansLimit >= 0 && ($this->spansCreated >= $this->spansLimit)) {
+            return true;
+        } else {
+            return function_exists('dd_trace_check_memory_under_limit') && !dd_trace_check_memory_under_limit();
+        }
+    }
+
     /**
      * Resets this tracer to its original state.
      */
@@ -121,6 +142,8 @@ final class Tracer implements TracerInterface
         $this->scopeManager = new ScopeManager();
         $this->globalConfig = Configuration::get();
         $this->sampler = new ConfigurableSampler();
+        $this->spansLimit = $this->globalConfig->getSpansLimit();
+        $this->spansCreated = 0;
         $this->traces = [];
     }
 
@@ -145,6 +168,8 @@ final class Tracer implements TracerInterface
      */
     public function startSpan($operationName, $options = [])
     {
+        $this->spansCreated++;
+
         if (!$this->config['enabled']) {
             return NoopSpan::create();
         }
@@ -289,6 +314,14 @@ final class Tracer implements TracerInterface
             return;
         }
 
+        // We should refactor these blocks to use a pre-flush hook
+        if ($this->globalConfig->isHostnameReportingEnabled()) {
+            $this->addHostnameToRootSpan();
+        }
+        if ('cli' !== PHP_SAPI && $this->globalConfig->isURLAsResourceNameEnabled()) {
+            $this->addUrlAsResourceNameToRootSpan();
+        }
+
         if (self::isLogDebugActive()) {
             self::logDebug('Flushing {count} traces, {spanCount} spans', [
                 'count' => count($this->traces),
@@ -358,6 +391,36 @@ final class Tracer implements TracerInterface
         }
 
         return $tracesToBeSent;
+    }
+
+    private function addHostnameToRootSpan()
+    {
+        $hostname = gethostname();
+        if ($hostname !== false) {
+            $span = $this->getRootScope()->getSpan();
+            if ($span !== null) {
+                $span->setTag(Tag::HOSTNAME, $hostname);
+            }
+        }
+    }
+
+    private function addUrlAsResourceNameToRootSpan()
+    {
+        $scope = $this->getRootScope();
+        if (null === $scope) {
+            return;
+        }
+        $span = $scope->getSpan();
+        if ('web.request' !== $span->getResource()) {
+            return;
+        }
+        // Normalized URL as the resource name
+        $normalizer = new Urls(explode(',', getenv('DD_TRACE_RESOURCE_URI_MAPPING')));
+        $span->setTag(
+            Tag::RESOURCE_NAME,
+            $_SERVER['REQUEST_METHOD'] . ' ' . $normalizer->normalize($_SERVER['REQUEST_URI']),
+            true
+        );
     }
 
     private function record(Span $span)

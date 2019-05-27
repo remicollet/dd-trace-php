@@ -16,6 +16,7 @@ require __DIR__ . '/../src/DDTrace/Span.php';
 require __DIR__ . '/../src/DDTrace/Tracer.php';
 require __DIR__ . '/../src/DDTrace/Configuration/AbstractConfiguration.php';
 require __DIR__ . '/../src/DDTrace/Configuration/EnvVariableRegistry.php';
+require __DIR__ . '/../src/DDTrace/Obfuscation/WildcardToRegex.php';
 require __DIR__ . '/../src/DDTrace/StartSpanOptionsFactory.php';
 require __DIR__ . '/../src/DDTrace/Time.php';
 require __DIR__ . '/../src/DDTrace/Transport/Http.php';
@@ -58,6 +59,7 @@ require __DIR__ . '/../src/DDTrace/ScopeManager.php';
 require __DIR__ . '/../src/DDTrace/Integrations/AbstractIntegrationConfiguration.php';
 require __DIR__ . '/../src/DDTrace/Integrations/DefaultIntegrationConfiguration.php';
 require __DIR__ . '/../src/DDTrace/Integrations/Integration.php';
+require __DIR__ . '/../src/DDTrace/Integrations/CakePHP/CakePHPIntegration.php';
 require __DIR__ . '/../src/DDTrace/Integrations/ZendFramework/ZendFrameworkIntegration.php';
 require __DIR__ . '/../src/DDTrace/Integrations/Web/WebIntegration.php';
 require __DIR__ . '/../src/DDTrace/Integrations/Predis/PredisIntegration.php';
@@ -71,10 +73,13 @@ require __DIR__ . '/../src/DDTrace/Integrations/Mongo/MongoClientIntegration.php
 require __DIR__ . '/../src/DDTrace/Integrations/Mongo/MongoDBIntegration.php';
 require __DIR__ . '/../src/DDTrace/Integrations/Mongo/MongoCollectionIntegration.php';
 require __DIR__ . '/../src/DDTrace/Integrations/Mongo/MongoIntegration.php';
+require __DIR__ . '/../src/DDTrace/Integrations/Slim/SlimIntegration.php';
 require __DIR__ . '/../src/DDTrace/Integrations/Symfony/SymfonyIntegration.php';
 require __DIR__ . '/../src/DDTrace/Integrations/ElasticSearch/V1/ElasticSearchIntegration.php';
 require __DIR__ . '/../src/DDTrace/Integrations/Laravel/LaravelIntegration.php';
 require __DIR__ . '/../src/DDTrace/Integrations/Laravel/V4/LaravelIntegration.php';
+require __DIR__ . '/../src/DDTrace/Integrations/Lumen/LumenIntegration.php';
+require __DIR__ . '/../src/DDTrace/Integrations/Lumen/V5/LumenIntegrationLoader.php';
 require __DIR__ . '/../src/DDTrace/Integrations/Guzzle/GuzzleIntegration.php';
 
 // Loggers

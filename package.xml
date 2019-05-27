@@ -10,10 +10,10 @@
         <email>sammyk@php.net</email>
         <active>yes</active>
     </lead>
-    <date>2019-04-25</date>
+    <date>2019-05-17</date>
     <version>
-        <release>0.20.0</release>
-        <api>0.20.0</api>
+        <release>0.24.0</release>
+        <api>0.24.0</api>
     </version>
     <stability>
         <release>stable</release>
@@ -21,11 +21,14 @@
     </stability>
     <license uri="https://github.com/DataDog/dd-trace-php/blob/master/LICENSE">BSD 3-Clause</license>
     <notes>
-### Added
-- Force tracing or discarding trace via special Span tag (manual.keep and manual.drop) #409
+        ### Added
+        - Tracer limited mode, stopping span creation when memory use raises to 80% of current PHP memory limit #437
+        - Configurable Curl timeouts `DD_TRACE_AGENT_TIMEOUT` and `DD_TRACE_AGENT_CONNECT_TIMEOUT` when communicating with the agent #150
+        - Configurable `DD_TRACE_REPORT_HOSTNAME` reporting of hostname via root span #441
+        - Support for CakePHP v2 and Cake Console v2 #436
 
-### Fixed
-- Resource use by caching configuration values instead of processing data on every access #406
+        ### Fixed
+        - Generation of `E_WARNING` in certain contexts of PHP 5 installs when the `date.timezone` INI setting is not set #435
     </notes>
     <contents>
         <dir name="/">
@@ -38,6 +41,11 @@
                     <file name="ddtrace.c" role="src" />
                     <file name="ddtrace.h" role="src" />
                     <file name="debug.h" role="src" />
+                    <file name="memory_limit.c" role="src" />
+                    <file name="memory_limit.h" role="src" />
+                    <file name="circuit_breaker.c" role="src" />
+                    <file name="circuit_breaker.h" role="src" />
+                    <file name="vendor_stdatomic.h" role="src" />
                     <file name="dispatch.c" role="src" />
                     <file name="dispatch.h" role="src" />
                     <file name="dispatch_compat.h" role="src" />
@@ -54,6 +62,7 @@
                     <file name="serializer.c" role="src" />
                     <file name="serializer.h" role="src" />
                     <file name="version.h" role="src" />
+                    <file name="compatibility.h" role="src" />
                     <dir name="mpack">
                         <file name="AUTHORS.md" role="doc" />
                         <file name="CHANGELOG.md" role="doc" />
@@ -66,17 +75,28 @@
             </dir>
             <dir name="tests">
                 <dir name="ext">
+                    <dir name="includes">
+                        <file name="try_catch_finally.php" role="test" />
+                    </dir>
                     <file name="access_modifier_method_access_hook.phpt" role="test" />
                     <file name="access_modifier_property_access_hook.phpt" role="test" />
                     <file name="allow_overriding_before_overrided_methods_functions_are_defined.phpt" role="test" />
                     <file name="case_insensitive_method_hook.phpt" role="test" />
                     <file name="closure_accessing_outside_variables.phpt" role="test" />
                     <file name="closure_set_inside_object_methods.phpt" role="test" />
+                    <file name="circuit_breaker_info.phpt" role="test" />
+                    <file name="circuit_breaker_retry_time.phpt" role="test" />
+                    <file name="circuit_breaker_max_failures.phpt" role="test" />
                     <file name="dd_trace_serialize_msgpack.phpt" role="test" />
                     <file name="dd_trace_serialize_msgpack_error.phpt" role="test" />
                     <file name="dd_trace_serialize_msgpack_error_strict.phpt" role="test" />
                     <file name="disable_tracing_disables_tracing.phpt" role="test" />
                     <file name="do_not_check_if_class_or_function_exists_by_default.phpt" role="test" />
+                    <file name="dd_trace_forward_call_error.phpt" role="test" />
+                    <file name="dd_trace_forward_call_for_functions.phpt" role="test" />
+                    <file name="dd_trace_forward_call_from_include.phpt" role="test" />
+                    <file name="dd_trace_forward_call_with_inheritance.phpt" role="test" />
+                    <file name="dd_trace_forward_call_with_private_callback.phpt" role="test" />
                     <file name="enable_throw_exception_if_overridable_doesnt_exist.phpt" role="test" />
                     <file name="method_invoked_via_reflection.phpt" role="test" />
                     <file name="method_returning_array.phpt" role="test" />
@@ -98,6 +118,20 @@
                     <file name="segfault_backtrace_disabled_via_env_enabled_in_ini.phpt" role="test" />
                     <file name="segfault_backtrace_enabled.phpt" role="test" />
                     <file name="segfault_backtrace_enabled_via_env_disabled_in_ini.phpt" role="test" />
+                    <file name="get_memory_limit_set_by_percentage.phpt" role="test" />
+                    <file name="get_memory_limit_unlimited_set_by_percentage.phpt" role="test" />
+                    <file name="check_memory_under_limit_high_user_limit.phpt" role="test" />
+                    <file name="get_memory_limit_unlimited_set_by_absolute.phpt" role="test" />
+                    <file name="get_memory_limit_0.phpt" role="test" />
+                    <file name="check_memory_under_limit_high_limit.phpt" role="test" />
+                    <file name="check_memory_under_limit_low_user_limit.phpt" role="test" />
+                    <file name="get_memory_limit_unlimited_default.phpt" role="test" />
+                    <file name="check_memory_under_limit_default.phpt" role="test" />
+                    <file name="get_memory_limit_set_by_absolute.phpt" role="test" />
+                    <file name="get_memory_limit_default.phpt" role="test" />
+                    <file name="check_memory_under_limit_low_limit.phpt" role="test" />
+                    <file name="extension_disabled.phpt" role="test" />
+                    <file name="get_memory_limit_0_percent.phpt" role="test" />
                     <file name="segfault_backtrace_enabled_via_env.phpt" role="test" />
                     <file name="simple_function_hook.phpt" role="test" />
                     <file name="simple_method_hook.phpt" role="test" />
@@ -122,7 +156,7 @@
         <required>
             <php>
                 <min>5.6</min>
-                <max>7.2.99</max>
+                <max>7.3.99</max>
             </php>
             <pearinstaller>
                 <min>1.4.0</min>

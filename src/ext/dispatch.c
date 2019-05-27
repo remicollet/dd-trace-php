@@ -108,7 +108,7 @@ static ddtrace_dispatch_t *find_dispatch(const zend_class_entry *class, ddtrace_
     }
 }
 
-#if PHP_VERSION_ID < 50500
+#if PHP_VERSION_ID < 70000
 zend_function *fcall_fbc(zend_execute_data *execute_data TSRMLS_DC) {
     zend_op *opline = EX(opline);
     zend_function *fbc = NULL;
@@ -132,14 +132,16 @@ static void execute_fcall(ddtrace_dispatch_t *dispatch, zval *this, zend_execute
     char *error = NULL;
     zval closure;
     INIT_ZVAL(closure);
-    zend_function *current_fbc = DDTRACE_G(current_fbc);
+    zend_function *current_fbc = DDTRACE_G(original_context).fbc;
     zend_class_entry *executed_method_class = NULL;
     if (this) {
         executed_method_class = Z_OBJCE_P(this);
     }
 
     zend_function *func;
+
 #if PHP_VERSION_ID < 70000
+    const char *func_name = DDTRACE_CALLBACK_NAME;
     func = datadog_current_function(execute_data);
 
     zend_function *callable = (zend_function *)zend_get_closure_method_def(&dispatch->callable TSRMLS_CC);
@@ -151,6 +153,7 @@ static void execute_fcall(ddtrace_dispatch_t *dispatch, zval *this, zend_execute
 
     zend_create_closure(&closure, callable, executed_method_class, this TSRMLS_CC);
 #else
+    zend_string *func_name = zend_string_init(ZEND_STRL(DDTRACE_CALLBACK_NAME), 0);
     func = EX(func);
     zend_create_closure(&closure, (zend_function *)zend_get_closure_method_def(&dispatch->callable),
                         executed_method_class, executed_method_class, this TSRMLS_CC);
@@ -181,13 +184,40 @@ static void execute_fcall(ddtrace_dispatch_t *dispatch, zval *this, zend_execute
     }
 
     ddtrace_setup_fcall(execute_data, &fci, return_value_ptr TSRMLS_CC);
+
+    // Move this to closure zval before zend_fcall_info_init()
+    fcc.function_handler->common.function_name = func_name;
+
+#if PHP_VERSION_ID >= 70000
+    zend_class_entry *orig_scope = fcc.function_handler->common.scope;
+    fcc.function_handler->common.scope = DDTRACE_G(original_context).calling_fbc->common.scope;
+    fcc.calling_scope = DDTRACE_G(original_context).calling_fbc->common.scope;
+#endif
+
+    zend_execute_data *prev_original_execute_data = DDTRACE_G(original_context).execute_data;
+    DDTRACE_G(original_context).execute_data = execute_data;
+#if PHP_VERSION_ID < 70000
+    zval *prev_original_function_name = DDTRACE_G(original_context).function_name;
+    DDTRACE_G(original_context).function_name = (*EG(opline_ptr))->op1.zv;
+#endif
+
     zend_call_function(&fci, &fcc TSRMLS_CC);
+
+#if PHP_VERSION_ID < 70000
+    DDTRACE_G(original_context).function_name = prev_original_function_name;
+#endif
+    DDTRACE_G(original_context).execute_data = prev_original_execute_data;
+
+#if PHP_VERSION_ID >= 70000
+    fcc.function_handler->common.scope = orig_scope;
+#endif
 
 #if PHP_VERSION_ID < 70000
     if (fci.params) {
         efree(fci.params);
     }
 #else
+    zend_string_release(func_name);
     if (fci.params) {
         zend_fcall_info_args_clear(&fci, 0);
     }
@@ -203,7 +233,7 @@ _exit_cleanup:
         }
 #endif
     }
-    DDTRACE_G(current_fbc) = current_fbc;
+    DDTRACE_G(original_context).fbc = current_fbc;
     Z_DELREF(closure);
 }
 
@@ -248,8 +278,8 @@ static zend_always_inline zend_bool wrap_and_run(zend_execute_data *execute_data
         class = Z_OBJCE_P(this);
     }
 
-    if (!this && (DDTRACE_G(current_fbc)->common.fn_flags & ZEND_ACC_STATIC) != 0) {
-        class = DDTRACE_G(current_fbc)->common.scope;
+    if (!this && (DDTRACE_G(original_context).fbc->common.fn_flags & ZEND_ACC_STATIC) != 0) {
+        class = DDTRACE_G(original_context).fbc->common.scope;
     }
 
     if (class) {
@@ -313,7 +343,7 @@ static zend_always_inline zend_bool wrap_and_run(zend_execute_data *execute_data
             }
 
             ret->var.fcall_returned_reference =
-                (DDTRACE_G(current_fbc)->common.fn_flags & ZEND_ACC_RETURN_REFERENCE) != 0;
+                (DDTRACE_G(original_context).fbc->common.fn_flags & ZEND_ACC_RETURN_REFERENCE) != 0;
             return_value = ret->var.ptr_ptr;
         }
 
@@ -367,14 +397,10 @@ static zend_always_inline zend_function *get_current_fbc(zend_execute_data *exec
     if (EX(opline)->opcode == ZEND_DO_FCALL_BY_NAME) {
         fbc = FBC();
     } else {
-#if PHP_VERSION_ID < 50500
         fbc = fcall_fbc(execute_data TSRMLS_CC);
-#else
 #ifdef ZTS
         (void)TSRMLS_C;
 #endif  // ZTS
-        fbc = EX(function_state).function;
-#endif
     }
 #else
     fbc = EX(call)->func;
@@ -479,12 +505,38 @@ int ddtrace_wrap_fcall(zend_execute_data *execute_data TSRMLS_DC) {
     if (!is_function_wrappable(execute_data, current_fbc, &lookup_data)) {
         return default_dispatch(execute_data TSRMLS_CC);
     }
-    zend_function *previous_fbc = DDTRACE_G(current_fbc);
-    DDTRACE_G(current_fbc) = current_fbc;
+    zend_function *previous_fbc = DDTRACE_G(original_context).fbc;
+    DDTRACE_G(original_context).fbc = current_fbc;
+    zend_function *previous_calling_fbc = DDTRACE_G(original_context).calling_fbc;
+#if PHP_VERSION_ID < 70000
+    DDTRACE_G(original_context).calling_fbc =
+        execute_data->function_state.function && execute_data->function_state.function->common.scope
+            ? execute_data->function_state.function
+            : current_fbc;
+#else
+    DDTRACE_G(original_context).calling_fbc = current_fbc->common.scope ? current_fbc : execute_data->func;
+#endif
+    zval *this = ddtrace_this(execute_data);
+#if PHP_VERSION_ID < 70000
+    zval *previous_this = DDTRACE_G(original_context).this;
+    DDTRACE_G(original_context).this = this;
+#else
+    zend_object *previous_this = DDTRACE_G(original_context).this;
+    DDTRACE_G(original_context).this = this ? Z_OBJ_P(this) : NULL;
+#endif
+    zend_class_entry *previous_calling_ce = DDTRACE_G(original_context).calling_ce;
+#if PHP_VERSION_ID < 70000
+    DDTRACE_G(original_context).calling_ce = DDTRACE_G(original_context).calling_fbc->common.scope;
+#else
+    DDTRACE_G(original_context).calling_ce = Z_OBJ(execute_data->This) ? Z_OBJ(execute_data->This)->ce : NULL;
+#endif
 
     zend_bool wrapped = wrap_and_run(execute_data, &lookup_data TSRMLS_CC);
 
-    DDTRACE_G(current_fbc) = previous_fbc;
+    DDTRACE_G(original_context).calling_ce = previous_calling_ce;
+    DDTRACE_G(original_context).this = previous_this;
+    DDTRACE_G(original_context).calling_fbc = previous_calling_fbc;
+    DDTRACE_G(original_context).fbc = previous_fbc;
     if (wrapped) {
         return update_opcode_leave(execute_data TSRMLS_CC);
     } else {

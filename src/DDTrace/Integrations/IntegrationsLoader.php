@@ -3,16 +3,19 @@
 namespace DDTrace\Integrations;
 
 use DDTrace\Configuration;
+use DDTrace\Integrations\CakePHP\CakePHPIntegration;
 use DDTrace\Integrations\Curl\CurlIntegration;
 use DDTrace\Integrations\ElasticSearch\V1\ElasticSearchIntegration;
 use DDTrace\Integrations\Eloquent\EloquentIntegration;
 use DDTrace\Integrations\Guzzle\GuzzleIntegration;
 use DDTrace\Integrations\Laravel\LaravelIntegration;
+use DDTrace\Integrations\Lumen\LumenIntegration;
 use DDTrace\Integrations\Memcached\MemcachedIntegration;
 use DDTrace\Integrations\Mongo\MongoIntegration;
 use DDTrace\Integrations\Mysqli\MysqliIntegration;
 use DDTrace\Integrations\PDO\PDOIntegration;
 use DDTrace\Integrations\Predis\PredisIntegration;
+use DDTrace\Integrations\Slim\SlimIntegration;
 use DDTrace\Integrations\Symfony\SymfonyIntegration;
 use DDTrace\Integrations\Web\WebIntegration;
 use DDTrace\Integrations\ZendFramework\ZendFrameworkIntegration;
@@ -39,16 +42,19 @@ class IntegrationsLoader
      * @var array
      */
     public static $officiallySupportedIntegrations = [
+        CakePHPIntegration::NAME => '\DDTrace\Integrations\CakePHP\CakePHPIntegration',
         CurlIntegration::NAME => '\DDTrace\Integrations\Curl\CurlIntegration',
         ElasticSearchIntegration::NAME => '\DDTrace\Integrations\ElasticSearch\V1\ElasticSearchIntegration',
         EloquentIntegration::NAME => '\DDTrace\Integrations\Eloquent\EloquentIntegration',
         GuzzleIntegration::NAME => '\DDTrace\Integrations\Guzzle\GuzzleIntegration',
         LaravelIntegration::NAME => '\DDTrace\Integrations\Laravel\LaravelIntegration',
+        LumenIntegration::NAME => '\DDTrace\Integrations\Lumen\LumenIntegration',
         MemcachedIntegration::NAME => '\DDTrace\Integrations\Memcached\MemcachedIntegration',
         MongoIntegration::NAME => '\DDTrace\Integrations\Mongo\MongoIntegration',
         MysqliIntegration::NAME => '\DDTrace\Integrations\Mysqli\MysqliIntegration',
         PDOIntegration::NAME => '\DDTrace\Integrations\PDO\PDOIntegration',
         PredisIntegration::NAME => '\DDTrace\Integrations\Predis\PredisIntegration',
+        SlimIntegration::NAME => '\DDTrace\Integrations\Slim\SlimIntegration',
         SymfonyIntegration::NAME => '\DDTrace\Integrations\Symfony\SymfonyIntegration',
         WebIntegration::NAME => '\DDTrace\Integrations\Web\WebIntegration',
         ZendFrameworkIntegration::NAME => '\DDTrace\Integrations\ZendFramework\ZendFrameworkIntegration',

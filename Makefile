@@ -131,9 +131,10 @@ packages: .apk .rpm .deb .tar.gz
 	tar -zcf packages.tar.gz $(PACKAGES_BUILD_DIR)
 
 verify_pecl_file_definitions:
-	@for i in src/ext/*.c src/ext/*.h tests/ext/*.php*; do\
-		k=$$(basename $$i); \
-		grep -q $$k package.xml || ( echo missing $$k && exit 1); \
+	@for i in $(notdir $(C_FILES) $(TEST_FILES)); do\
+		grep -q $$i package.xml && continue;\
+		echo package.xml is missing \"$$i\"; \
+		exit 1;\
 	done
 	@echo "PECL file definitions are correct"
 
@@ -143,6 +144,11 @@ verify_version:
 	@grep -q "#define PHP_DDTRACE_VERSION \"$(VERSION)" src/ext/version.h || (echo src/ext/version.h Version missmatch && exit 1)
 	@echo "All version files match"
 
-verify_all: verify_pecl_file_definitions verify_version
+verify_package_xml:
+	@pear package-validate package.xml
+	@echo "The package.xml file is valid"
 
-.PHONY: dist_clean clean all clang_format_check clang_format_fix install sudo_install test_c test_c_mem test_extension_ci test test_integration install_ini install_all .apk .rpm .deb .tar.gz sudo debug strict run-tests.php verify_pecl_file_definitions verify_version verify_all
+verify_all: verify_pecl_file_definitions verify_version verify_package_xml
+
+.PHONY: dist_clean clean all clang_format_check clang_format_fix install sudo_install test_c test_c_mem test_extension_ci test test_integration install_ini install_all \
+	.apk .rpm .deb .tar.gz sudo debug strict run-tests.php verify_pecl_file_definitions verify_version verify_package_xml verify_all
