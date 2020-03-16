@@ -2,15 +2,34 @@
 #define DD_LOGGING_H
 #include <php.h>
 
-#if defined(ZTS) && PHP_VERSION_ID < 70000
-#define TSRMLS_FC TSRMLS_D,
-#define ddtrace_log_errf(...) _ddtrace_log_errf(TSRMLS_C, __VA_ARGS__)
-#else
-#define TSRMLS_FC
-#define ddtrace_log_errf(...) _ddtrace_log_errf(__VA_ARGS__)
-#endif
+#include "configuration.h"
 
-#define ddtrace_log_err(message) php_log_err(message TSRMLS_CC)
-void _ddtrace_log_errf(TSRMLS_FC const char *format, ...);
+inline void ddtrace_log_err(char *message) {
+    TSRMLS_FETCH();
+    php_log_err(message TSRMLS_CC);
+}
+
+#define ddtrace_log_debugf(...)        \
+    if (get_dd_trace_debug()) {        \
+        ddtrace_log_errf(__VA_ARGS__); \
+    }
+#define ddtrace_log_debug(message) \
+    if (get_dd_trace_debug()) {    \
+        ddtrace_log_err(message);  \
+    }
+
+void ddtrace_log_errf(const char *format, ...);
+
+/* These are used by the background sender; use other functions from PHP thread.
+ * {{{ */
+void ddtrace_bgs_log_minit(void);
+void ddtrace_bgs_log_rinit(char *error_log);
+void ddtrace_bgs_log_mshutdown(void);
+
+int ddtrace_bgs_logf(const char *fmt, ...);
+/* variadic functions cannot be inlined; we use a macro to essentially inline
+ * the part we care about: the early return */
+#define ddtrace_bgs_logf(fmt, ...) (get_dd_trace_debug_curl_output() ? ddtrace_bgs_logf(fmt, __VA_ARGS__) : 0)
+/* }}} */
 
 #endif  // DD_LOGGING_H

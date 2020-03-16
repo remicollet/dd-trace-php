@@ -17,6 +17,7 @@ class Tag
     const ERROR_MSG = 'error.msg'; // string representing the error message
     const ERROR_TYPE = 'error.type'; // string representing the type of the error
     const ERROR_STACK = 'error.stack'; // human readable version of the stack
+    const INTEGRATION_NAME = 'integration.name';
     const HTTP_METHOD = 'http.method';
     const HTTP_STATUS_CODE = 'http.status_code';
     const HTTP_URL = 'http.url';
@@ -30,6 +31,7 @@ class Tag
     const BYTES_OUT = 'net.out.bytes';
     const ANALYTICS_KEY = '_dd1.sr.eausr';
     const HOSTNAME = '_dd.hostname';
+    const ORIGIN = '_dd.origin';
 
     // Elasticsearch
     const ELASTICSEARCH_BODY = 'elasticsearch.body';

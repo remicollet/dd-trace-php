@@ -3,8 +3,7 @@
 namespace DDTrace;
 
 use DDTrace\Integrations\Integration;
-use DDTrace\Data\Span as SpanData;
-
+use DDTrace\Data\Span as DataSpan;
 use DDTrace\Exceptions\InvalidSpanArgument;
 use DDTrace\SpanContext as SpanContext;
 use DDTrace\Http\Urls;
@@ -13,7 +12,7 @@ use Exception;
 use InvalidArgumentException;
 use Throwable;
 
-final class Span extends SpanData
+final class Span extends DataSpan
 {
     private static $metricNames = [ Tag::ANALYTICS_KEY => true ];
     // associative array for quickly checking if tag has special meaning, should include metric_names
@@ -313,6 +312,8 @@ final class Span extends SpanData
         }
 
         $this->duration = ($finishTime ?: Time::now()) - $this->startTime;
+        // Sync with span ID stack at the C level
+        dd_trace_pop_span_id();
     }
 
     /**

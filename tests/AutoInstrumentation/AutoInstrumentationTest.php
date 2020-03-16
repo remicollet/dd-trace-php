@@ -25,7 +25,7 @@ class AutoInstrumentationTest extends BaseTestCase
 
     public function autoInstrumentationScenarios()
     {
-        $currentTracerVersion = Tracer::VERSION;
+        $currentTracerVersion = Tracer::version();
         return [
             // In a typical scenario, when the user does not declare a dependency on datadog/dd-trace in the composer
             // file we should pick the tracer from the installed bundle
@@ -33,7 +33,11 @@ class AutoInstrumentationTest extends BaseTestCase
 
             // We want to make sure that the version declared in composer.json is picked up instead of the installed
             // version.
-            ['composer_with_ddtrace_dependency', '0.11.0-beta', true],
+            ['composer_with_ddtrace_dependency', '0.31.0', true],
+
+            // We want to make sure that users can safely declare a dependency in the latest version of our
+            // tracer in composer even if not required.
+            ['composer_with_local_code_dependency', $currentTracerVersion, true],
 
             // Symfony 3.3 has a loader Symfony\Component\Config\Resource\ClassExistenceResource which registers a
             // private method as the actual class loader. Because of https://github.com/DataDog/dd-trace-php/issues/224

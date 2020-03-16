@@ -48,6 +48,22 @@ final class CurlIntegrationTest extends IntegrationTestCase
         putenv('DD_CURL_ANALYTICS_ENABLED');
     }
 
+    private static function commonCurlInfoTags()
+    {
+        $tags = [
+            'duration',
+            'network.bytes_read',
+            'network.bytes_written',
+        ];
+        if (\version_compare(\PHP_VERSION, '5.4.7', '>=')) {
+            $tags += \array_merge(
+                $tags,
+                ['network.client.ip', 'network.client.port', 'network.destination.ip', 'network.destination.port']
+            );
+        }
+        return $tags;
+    }
+
     public function testLoad200UrlOnInit()
     {
         $traces = $this->isolateTracer(function () {
@@ -64,7 +80,9 @@ final class CurlIntegrationTest extends IntegrationTestCase
                 ->withExactTags([
                     'http.url' => self::URL . '/status/200',
                     'http.status_code' => '200',
-                ]),
+                ])
+                ->withExistingTagsNames(self::commonCurlInfoTags())
+                ->skipTagsLike('/^curl\..*/'),
         ]);
     }
 
@@ -85,7 +103,9 @@ final class CurlIntegrationTest extends IntegrationTestCase
                 ->withExactTags([
                     'http.url' => self::URL . '/status/200',
                     'http.status_code' => '200',
-                ]),
+                ])
+                ->withExistingTagsNames(self::commonCurlInfoTags())
+                ->skipTagsLike('/^curl\..*/'),
         ]);
     }
 
@@ -106,7 +126,9 @@ final class CurlIntegrationTest extends IntegrationTestCase
                 ->withExactTags([
                     'http.url' => self::URL . '/status/200',
                     'http.status_code' => '200',
-                ]),
+                ])
+                ->withExistingTagsNames(self::commonCurlInfoTags())
+                ->skipTagsLike('/^curl\..*/'),
         ]);
     }
 
@@ -124,7 +146,9 @@ final class CurlIntegrationTest extends IntegrationTestCase
                 ->withExactTags([
                     'http.url' => self::URL . '/status/200',
                     'http.status_code' => '200',
-                ]),
+                ])
+                ->withExistingTagsNames(self::commonCurlInfoTags())
+                ->skipTagsLike('/^curl\..*/'),
         ]);
     }
 
@@ -144,7 +168,9 @@ final class CurlIntegrationTest extends IntegrationTestCase
                 ->withExactTags([
                     'http.url' => self::URL . '/status/404',
                     'http.status_code' => '404',
-                ]),
+                ])
+                ->withExistingTagsNames(self::commonCurlInfoTags())
+                ->skipTagsLike('/^curl\..*/'),
         ]);
     }
 
@@ -166,6 +192,8 @@ final class CurlIntegrationTest extends IntegrationTestCase
                     'http.status_code' => '0',
                 ])
                 ->withExistingTagsNames(['error.msg'])
+                ->withExistingTagsNames(self::commonCurlInfoTags())
+                ->skipTagsLike('/^curl\..*/')
                 ->setError('curl error'),
         ]);
     }
@@ -188,6 +216,8 @@ final class CurlIntegrationTest extends IntegrationTestCase
                     'http.status_code' => '0',
                 ])
                 ->withExistingTagsNames(['error.msg'])
+                ->withExistingTagsNames(self::commonCurlInfoTags())
+                ->skipTagsLike('/^curl\..*/')
                 ->setError('curl error'),
         ]);
     }
@@ -209,6 +239,8 @@ final class CurlIntegrationTest extends IntegrationTestCase
                     'http.url' => 'http://__i_am_not_real__.invalid/',
                     'http.status_code' => '0',
                 ])
+                ->withExistingTagsNames(self::commonCurlInfoTags())
+                ->skipTagsLike('/^curl\..*/')
                 ->setError('curl error', 'Could not resolve host: __i_am_not_real__.invalid'),
         ]);
     }
@@ -246,6 +278,57 @@ final class CurlIntegrationTest extends IntegrationTestCase
         // parent is: curl_exec
         $this->assertSame($traces[0][1]['span_id'], (int) $found['headers']['X-Datadog-Parent-Id']);
         $this->assertSame('1', $found['headers']['X-Datadog-Sampling-Priority']);
+        $this->assertSame($traces[0][0]['metrics']['_sampling_priority_v1'], PrioritySampling::AUTO_KEEP);
+        // existing headers are honored
+        $this->assertSame('preserved_value', $found['headers']['Honored']);
+    }
+
+    public function testOriginIsPropagatedAndSetsRootSpanTag()
+    {
+        $found = [];
+        $traces = $this->isolateTracer(function () use (&$found) {
+            /** @var Tracer $tracer */
+            $tracer = GlobalTracer::get();
+            $span = $tracer->startActiveSpan('custom')->getSpan();
+            $span->getContext()->origin = 'foo_origin';
+
+            $ch = curl_init(self::URL . '/headers');
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            $found = json_decode(curl_exec($ch), 1);
+
+            $span->finish();
+        });
+
+        $this->assertSame('foo_origin', $found['headers']['X-Datadog-Origin']);
+        $this->assertSame('foo_origin', $traces[0][0]['meta']['_dd.origin']);
+    }
+
+    public function testDistributedTracingIsPropagatedOnCopiedHandle()
+    {
+        $found = [];
+        $traces = $this->isolateTracer(function () use (&$found) {
+            /** @var Tracer $tracer */
+            $tracer = GlobalTracer::get();
+            $tracer->setPrioritySampling(PrioritySampling::AUTO_KEEP);
+            $span = $tracer->startActiveSpan('custom')->getSpan();
+
+            $ch1 = \curl_init(self::URL . '/headers');
+            \curl_setopt($ch1, CURLOPT_RETURNTRANSFER, true);
+            \curl_setopt($ch1, CURLOPT_HTTPHEADER, [
+                'honored: preserved_value',
+            ]);
+            $ch2 = \curl_copy_handle($ch1);
+            \curl_close($ch1);
+            $found = \json_decode(\curl_exec($ch2), 1);
+
+            $span->finish();
+        });
+
+        // trace is: custom
+        $this->assertSame($traces[0][0]['span_id'], (int) $found['headers']['X-Datadog-Trace-Id']);
+        // parent is: curl_exec
+        $this->assertSame($traces[0][1]['span_id'], (int) $found['headers']['X-Datadog-Parent-Id']);
+        $this->assertSame('1', $found['headers']['X-Datadog-Sampling-Priority']);
         // existing headers are honored
         $this->assertSame('preserved_value', $found['headers']['Honored']);
     }
@@ -259,7 +342,6 @@ final class CurlIntegrationTest extends IntegrationTestCase
             'isDistributedTracingEnabled' => false,
             'isPrioritySamplingEnabled' => false,
             'getGlobalTags' => [],
-            'getSpansLimit' => -1,
             'isDebugModeEnabled' => false,
         ]));
 
@@ -283,11 +365,9 @@ final class CurlIntegrationTest extends IntegrationTestCase
 
     public function testTracerIsRunningAtLimitedCapacityWeStillPropagateTheSpan()
     {
+        putenv('DD_TRACE_SPANS_LIMIT=0');
+        dd_trace_internal_fn('ddtrace_reload_config');
         $found = [];
-        Configuration::replace(\Mockery::mock(Configuration::get(), [
-            'getSpansLimit' => 0
-        ]));
-
         $traces = $this->isolateTracer(function () use (&$found) {
             /** @var Tracer $tracer */
             $tracer = GlobalTracer::get();
@@ -303,6 +383,8 @@ final class CurlIntegrationTest extends IntegrationTestCase
 
             $span->finish();
         });
+        putenv('DD_TRACE_MEMORY_LIMIT');
+        dd_trace_internal_fn('ddtrace_reload_config');
 
         $this->assertSame('1', $found['headers']['X-Datadog-Sampling-Priority']);
         // existing headers are honored
@@ -320,7 +402,6 @@ final class CurlIntegrationTest extends IntegrationTestCase
     {
         $found = [];
         $traces = $this->isolateLimitedTracer(function () use (&$found) {
-            /** @var Tracer $tracer */
             $ch = curl_init(self::URL . '/headers');
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($ch, CURLOPT_HTTPHEADER, [
@@ -337,5 +418,55 @@ final class CurlIntegrationTest extends IntegrationTestCase
         $this->assertArrayNotHasKey('X-Datadog-Sampling-Priority', $found['headers']);
 
         $this->assertEmpty($traces);
+    }
+
+    public function testAppendHostnameToServiceName()
+    {
+        putenv('DD_TRACE_HTTP_CLIENT_SPLIT_BY_DOMAIN=true');
+
+        $traces = $this->isolateTracer(function () {
+            $ch = curl_init(self::URL . '/status/200');
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            $response = curl_exec($ch);
+            $this->assertSame('', $response);
+            curl_close($ch);
+        });
+
+        $this->assertSpans($traces, [
+            SpanAssertion::build(
+                'curl_exec',
+                'host-httpbin_integration',
+                'http',
+                'http://httpbin_integration/status/200'
+            )
+                ->setTraceAnalyticsCandidate()
+                ->withExactTags([
+                    'http.url' => self::URL . '/status/200',
+                    'http.status_code' => '200',
+                ])
+                ->withExistingTagsNames(self::commonCurlInfoTags())
+                ->skipTagsLike('/^curl\..*/'),
+        ]);
+    }
+
+    public function testHttpHeadersIsCorrectlySetAgain()
+    {
+        $this->inRootSpan(function () {
+            $found = [];
+
+            $ch = curl_init();
+            curl_setopt_array($ch, [
+                CURLOPT_URL => self::URL . '/headers',
+                CURLOPT_HTTPHEADER => ['Accept: application/json', 'Host: test.invalid'],
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_FAILONERROR => false,
+                CURLOPT_HEADER => false,
+            ]);
+            $found = json_decode(curl_exec($ch), 1);
+
+            $this->assertSame('test.invalid', $found['headers']['Host']);
+            $this->assertSame('application/json', $found['headers']['Accept']);
+            $this->assertSame('1', $found['headers']['X-Datadog-Sampling-Priority']);
+        });
     }
 }

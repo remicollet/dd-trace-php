@@ -6,10 +6,17 @@
 
     <rule ref="PSR12"/>
 
+    <rule ref="PSR12.Properties.ConstantVisibility.NotFound">
+        <severity>0</severity>
+    </rule>
+
     <rule ref="Generic.Commenting.Todo"/>
     <rule ref="Generic.Commenting.Fixme"/>
     <rule ref="Generic.Commenting.DocComment.MissingShort">
         <severity>0</severity>
+    </rule>
+    <rule ref="Generic.Files.LineLength.TooLong">
+        <exclude-pattern>tests/Integrations/*</exclude-pattern>
     </rule>
     <rule ref="PSR1.Classes.ClassDeclaration.MultipleClasses">
         <exclude-pattern>tests/*</exclude-pattern>
@@ -17,11 +24,14 @@
 
     <!-- PHP compatibility checks -->
     <config name="testVersion" value="5.4-7.3"/>
+    <exclude-pattern>dockerfiles/*</exclude-pattern>
     <exclude-pattern>playground*.php</exclude-pattern>
     <exclude-pattern>run-tests.php</exclude-pattern>
+    <exclude-pattern>src/dd-doctor.php</exclude-pattern>
     <exclude-pattern>*/vendor/*</exclude-pattern>
     <exclude-pattern>*/node_modules/*</exclude-pattern>
     <exclude-pattern>tests/ext/*</exclude-pattern>
+    <exclude-pattern>tests/overhead/*</exclude-pattern>
     <exclude-pattern>tests/Frameworks/*/Version_*/*</exclude-pattern>
     <exclude-pattern>tests/AutoInstrumentation</exclude-pattern>
 </ruleset>

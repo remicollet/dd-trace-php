@@ -14,17 +14,8 @@ use Symfony\Component\HttpKernel\Bundle\Bundle;
 use Symfony\Component\HttpKernel\KernelEvents;
 
 /**
- * DataDog Symfony tracing bundle. Use by installing the dd-trace library:
- *
- * composer require datadog/dd-trace
- *
- * And then add the bundle in app/AppKernel.php:
- *
- *         $bundles = [
- *             // ...
- *             new DDTrace\Integrations\SymfonyBundle(),
- *             // ...
- *         ];
+ * @deprecated: this class is deprecated and should not be added to the list of bundles. Automatic instrumentation
+ * from a long time does not require adding any bundle as tracing is done automatically.
  */
 class SymfonyBundle extends Bundle
 {
@@ -81,7 +72,9 @@ class SymfonyBundle extends Bundle
 
                 try {
                     $response = dd_trace_forward_call();
-                    $symfonyRequestSpan->setTag(Tag::HTTP_STATUS_CODE, $response->getStatusCode());
+                    if ($response) {
+                        $symfonyRequestSpan->setTag(Tag::HTTP_STATUS_CODE, $response->getStatusCode());
+                    }
                 } catch (\Exception $e) {
                     $span = $scope->getSpan();
                     $span->setError($e);
@@ -142,9 +135,14 @@ class SymfonyBundle extends Bundle
             'dispatch',
             function () use ($symfonyRequestSpan, &$request) {
                 $args = func_get_args();
+                if (isset($args[1]) && is_string($args[1])) {
+                    $eventName = $args[1];
+                } else {
+                    $eventName = is_object($args[0]) ? get_class($args[0]) : $args[0];
+                }
                 $scope = GlobalTracer::get()->startIntegrationScopeAndSpan(
                     SymfonyIntegration::getInstance(),
-                    'symfony.' . $args[0]
+                    'symfony.' . $eventName
                 );
                 SymfonyBundle::injectRouteInfo($args, $request, $symfonyRequestSpan);
                 return include __DIR__ . '/../../../try_catch_finally.php';
@@ -177,12 +175,18 @@ class SymfonyBundle extends Bundle
      */
     public static function injectRouteInfo($args, $request, Span $requestSpan)
     {
-        $eventName = $args[0];
+        if (count($args) < 2) {
+            return;
+        }
+        if (is_object($args[0])) {
+            list($event, $eventName) = $args;
+        } else {
+            list($eventName, $event) = $args;
+        }
         if ($eventName !== KernelEvents::CONTROLLER_ARGUMENTS) {
             return;
         }
 
-        $event = $args[1];
         if (!method_exists($event, 'getController')) {
             return;
         }
@@ -190,7 +194,8 @@ class SymfonyBundle extends Bundle
         // Controller and action is provided in the form [$controllerInstance, <actionMethodName>]
         $controllerAndAction = $event->getController();
 
-        if (!is_array($controllerAndAction)
+        if (
+            !is_array($controllerAndAction)
             || count($controllerAndAction) !== 2
             || !is_object($controllerAndAction[0])
         ) {

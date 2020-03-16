@@ -6,8 +6,10 @@ use DDTrace\Tests\Common\SpanAssertion;
 use DDTrace\Tests\Common\WebFrameworkTestCase;
 use DDTrace\Tests\Frameworks\Util\Request\GetSpec;
 
-final class RouteNameTest extends WebFrameworkTestCase
+class RouteNameTest extends WebFrameworkTestCase
 {
+    const IS_SANDBOX = false;
+
     protected static function getAppIndexScript()
     {
         return __DIR__ . '/../../../Frameworks/Symfony/Version_2_8/web/app.php';
@@ -23,7 +25,7 @@ final class RouteNameTest extends WebFrameworkTestCase
             $this->call($spec);
         });
 
-        $this->assertExpectedSpans($this, $traces, [
+        $this->assertFlameGraph($traces, [
             SpanAssertion::build(
                 'web.request',
                 'web.request',

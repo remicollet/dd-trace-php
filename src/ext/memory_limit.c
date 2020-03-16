@@ -7,22 +7,23 @@
 #include <php.h>
 #include <php_ini.h>
 #include <php_main.h>
+
 #include <ext/spl/spl_exceptions.h>
 #include <ext/standard/info.h>
 
 #include "compatibility.h"
+#include "configuration.h"
 #include "ddtrace.h"
 #include "debug.h"
-#include "env_config.h"
 #include "memory_limit.h"
 #include "serializer.h"
 
 ZEND_EXTERN_MODULE_GLOBALS(ddtrace);
 
-zend_long get_memory_limit(TSRMLS_D) {
-    char *raw_memory_limit = ddtrace_get_c_string_config("DD_TRACE_MEMORY_LIMIT");
+int64_t ddtrace_get_memory_limit(TSRMLS_D) {
+    char *raw_memory_limit = get_dd_trace_memory_limit();
     size_t len = 0;
-    zend_long limit = -1;
+    int64_t limit = -1;
 
     if (raw_memory_limit) {
         len = strlen(raw_memory_limit);
@@ -45,8 +46,21 @@ zend_long get_memory_limit(TSRMLS_D) {
     }
 
     if (raw_memory_limit) {
-        efree(raw_memory_limit);
+        free(raw_memory_limit);
     }
 
     return limit;
+}
+
+BOOL_T ddtrace_check_memory_under_limit(TSRMLS_D) {
+    static int64_t limit = -1;
+    static zend_bool fetched_limit = 0;
+    if (!fetched_limit) {  // cache get_memory_limit() result to make this function blazing fast
+        fetched_limit = 1;
+        limit = ddtrace_get_memory_limit(TSRMLS_C);
+    }
+    if (limit > 0) {
+        return ((zend_ulong)limit > zend_memory_usage(0 TSRMLS_CC)) ? TRUE : FALSE;
+    }
+    return TRUE;
 }

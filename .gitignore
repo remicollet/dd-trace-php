@@ -1,4 +1,4 @@
-**/vendor/
+**/vendor
 tmp/build_extension/
 composer.lock
 .scenarios.lock/
@@ -6,7 +6,7 @@ composer.lock
 .libs
 .deps
 **.code-workspace
-Makefile*
+/Makefile*
 acinclude.m4
 aclocal.m4
 autom4te*
@@ -38,4 +38,4 @@ tests/ext/*.mem
 tmp-php.ini
 tmp/opcache*
 *.orig
-benchmark.php
+docker-compose.override.yml

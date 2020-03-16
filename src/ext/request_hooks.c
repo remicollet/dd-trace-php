@@ -1,12 +1,14 @@
 #include "request_hooks.h"
-#include "compat_zend_string.h"
-#include "ddtrace.h"
-#include "logging.h"
 
 #include <Zend/zend.h>
 #include <Zend/zend_compile.h>
 #include <php_main.h>
 #include <string.h>
+
+#include "ddtrace.h"
+#include "engine_hooks.h"
+#include "env_config.h"
+#include "logging.h"
 
 ZEND_EXTERN_MODULE_GLOBALS(ddtrace);
 
@@ -47,7 +49,7 @@ int dd_no_blacklisted_modules(TSRMLS_D) {
 
     while (zend_hash_get_current_data_ex(&module_registry, (void *)&module, &pos) != FAILURE) {
         if (module && module->name && find_exact_match(blacklist, module->name)) {
-            ddtrace_log_errf("Found blacklisted module: %s, disabling conflicting functionality", module->name);
+            ddtrace_log_debugf("Found blacklisted module: %s, disabling conflicting functionality", module->name);
             no_blacklisted_modules = 0;
             break;
         }
@@ -56,7 +58,7 @@ int dd_no_blacklisted_modules(TSRMLS_D) {
 #else
     ZEND_HASH_FOREACH_PTR(&module_registry, module) {
         if (module && module->name && find_exact_match(blacklist, module->name)) {
-            ddtrace_log_errf("Found blacklisted module: %s, disabling conflicting functionality", module->name);
+            ddtrace_log_debugf("Found blacklisted module: %s, disabling conflicting functionality", module->name);
             no_blacklisted_modules = 0;
             break;
         }
@@ -78,7 +80,19 @@ int dd_execute_php_file(const char *filename TSRMLS_DC) {
     zval *result = NULL;
     int ret;
 
+    BOOL_T rv = FALSE;
+
+    ddtrace_error_handling eh_stream;
+    ddtrace_backup_error_handling(&eh_stream, EH_SUPPRESS TSRMLS_CC);
+
     ret = php_stream_open_for_zend_ex(filename, &file_handle, USE_PATH | STREAM_OPEN_FOR_INCLUDE TSRMLS_CC);
+
+    if (get_dd_trace_debug() && PG(last_error_message) && eh_stream.message != PG(last_error_message)) {
+        ddtrace_log_errf("Error raised while opening request-init-hook stream: %s in %s on line %d",
+                         PG(last_error_message), PG(last_error_file), PG(last_error_lineno));
+    }
+
+    ddtrace_restore_error_handling(&eh_stream TSRMLS_CC);
 
     if (ret == SUCCESS) {
         if (!file_handle.opened_path) {
@@ -99,20 +113,34 @@ int dd_execute_php_file(const char *filename TSRMLS_DC) {
                 zend_rebuild_symbol_table(TSRMLS_C);
             }
 
-            zend_execute(new_op_array TSRMLS_CC);
+            ddtrace_error_handling eh;
+            ddtrace_backup_error_handling(&eh, EH_SUPPRESS TSRMLS_CC);
+
+            zend_try { zend_execute(new_op_array TSRMLS_CC); }
+            zend_end_try();
+
+            if (get_dd_trace_debug() && PG(last_error_message) && eh.message != PG(last_error_message)) {
+                ddtrace_log_errf("Error raised in request init hook: %s in %s on line %d", PG(last_error_message),
+                                 PG(last_error_file), PG(last_error_lineno));
+            }
+
+            ddtrace_restore_error_handling(&eh TSRMLS_CC);
 
             destroy_op_array(new_op_array TSRMLS_CC);
             efree(new_op_array);
             if (!EG(exception)) {
-                if (EG(return_value_ptr_ptr)) {
+                if (EG(return_value_ptr_ptr) && *EG(return_value_ptr_ptr)) {
                     zval_ptr_dtor(EG(return_value_ptr_ptr));
                 }
             }
-
-            return 1;
+            ddtrace_maybe_clear_exception(TSRMLS_C);
+            rv = TRUE;
         }
+    } else {
+        ddtrace_log_debugf("Error opening request init hook: %s", filename);
     }
-    return 0;
+
+    return rv;
 }
 #else
 
@@ -125,11 +153,22 @@ int dd_execute_php_file(const char *filename TSRMLS_DC) {
     zend_file_handle file_handle;
     zend_op_array *new_op_array;
     zval result;
-    int ret;
+    int ret, rv = FALSE;
+
+    ddtrace_error_handling eh_stream;
+    // Using an EH_THROW here causes a non-recoverable zend_bailout()
+    ddtrace_backup_error_handling(&eh_stream, EH_NORMAL);
 
     ret = php_stream_open_for_zend_ex(filename, &file_handle, USE_PATH | STREAM_OPEN_FOR_INCLUDE);
 
-    if (ret == SUCCESS) {
+    if (get_dd_trace_debug() && PG(last_error_message) && eh_stream.message != PG(last_error_message)) {
+        ddtrace_log_errf("Error raised while opening request-init-hook stream: %s in %s on line %d",
+                         PG(last_error_message), PG(last_error_file), PG(last_error_lineno));
+    }
+
+    ddtrace_restore_error_handling(&eh_stream);
+
+    if (!EG(exception) && ret == SUCCESS) {
         zend_string *opened_path;
         if (!file_handle.opened_path) {
             file_handle.opened_path = zend_string_init(filename, filename_len, 0);
@@ -146,17 +185,32 @@ int dd_execute_php_file(const char *filename TSRMLS_DC) {
         zend_string_release(opened_path);
         if (new_op_array) {
             ZVAL_UNDEF(&result);
+
+            ddtrace_error_handling eh;
+            ddtrace_backup_error_handling(&eh, EH_THROW);
+
             zend_execute(new_op_array, &result);
+
+            if (get_dd_trace_debug() && PG(last_error_message) && eh.message != PG(last_error_message)) {
+                ddtrace_log_errf("Error raised in request init hook: %s in %s on line %d", PG(last_error_message),
+                                 PG(last_error_file), PG(last_error_lineno));
+            }
+
+            ddtrace_restore_error_handling(&eh);
 
             destroy_op_array(new_op_array);
             efree(new_op_array);
             if (!EG(exception)) {
                 zval_ptr_dtor(&result);
             }
-
-            return 1;
+            ddtrace_maybe_clear_exception();
+            rv = TRUE;
         }
+    } else {
+        ddtrace_maybe_clear_exception();
+        ddtrace_log_debugf("Error opening request init hook: %s", filename);
     }
-    return 0;
+
+    return rv;
 }
 #endif

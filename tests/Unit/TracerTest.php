@@ -3,6 +3,7 @@
 namespace DDTrace\Tests\Unit;
 
 use DDTrace\Configuration;
+use DDTrace\Format;
 use DDTrace\Sampling\PrioritySampling;
 use DDTrace\SpanContext;
 use DDTrace\Tag;
@@ -146,10 +147,22 @@ final class TracerTest extends BaseTestCase
         $tracer->flush();
     }
 
-    public function testPrioritySamplingIsAssigned()
+    public function testPrioritySamplingIsLazilyAssignedOnInject()
     {
         $tracer = new Tracer(new DebugTransport());
-        $tracer->startSpan(self::OPERATION_NAME);
+        $span = $tracer->startRootSpan(self::OPERATION_NAME)->getSpan();
+        $this->assertNull($tracer->getPrioritySampling());
+        $carrier = [];
+        $tracer->inject($span->getContext(), Format::TEXT_MAP, $carrier);
+        $this->assertSame(PrioritySampling::AUTO_KEEP, $tracer->getPrioritySampling());
+    }
+
+    public function testPrioritySamplingIsLazilyAssignedBeforeFlush()
+    {
+        $tracer = new Tracer(new DebugTransport());
+        $tracer->startRootSpan(self::OPERATION_NAME);
+        $this->assertNull($tracer->getPrioritySampling());
+        $tracer->flush();
         $this->assertSame(PrioritySampling::AUTO_KEEP, $tracer->getPrioritySampling());
     }
 
@@ -158,9 +171,11 @@ final class TracerTest extends BaseTestCase
         $distributedTracingContext = new SpanContext('', '', '', [], true);
         $distributedTracingContext->setPropagatedPrioritySampling(PrioritySampling::USER_REJECT);
         $tracer = new Tracer(new DebugTransport());
-        $tracer->startSpan(self::OPERATION_NAME, [
+        $tracer->startRootSpan(self::OPERATION_NAME, [
             'child_of' => $distributedTracingContext,
         ]);
+        // We need to flush as priority sampling is lazily evaluated at inject time or flush time.
+        $tracer->flush();
         $this->assertSame(PrioritySampling::USER_REJECT, $tracer->getPrioritySampling());
     }
 
@@ -181,7 +196,6 @@ final class TracerTest extends BaseTestCase
         Configuration::replace(\Mockery::mock(Configuration::get(), [
             'isAutofinishSpansEnabled' => true,
             'isPrioritySamplingEnabled' => false,
-            'getSpansLimit' => 1000,
             'isDebugModeEnabled' => false,
             'getGlobalTags' => [],
         ]));
@@ -241,7 +255,6 @@ final class TracerTest extends BaseTestCase
         Configuration::replace(\Mockery::mock(Configuration::get(), [
             'isAutofinishSpansEnabled' => true,
             'isPrioritySamplingEnabled' => false,
-            'getSpansLimit' => 1000,
             'isDebugModeEnabled' => false,
             'getGlobalTags' => [
                 'key1' => 'value1',
@@ -255,5 +268,28 @@ final class TracerTest extends BaseTestCase
 
         $this->assertSame('value1', $span->getAllTags()['key1']);
         $this->assertSame('value2', $span->getAllTags()['key2']);
+    }
+
+    public function testInternalAndUserlandSpansAreMergedIntoSameTraceOnSerialization()
+    {
+        if (PHP_VERSION_ID < 50600) {
+            $this->markTestSkipped('Sandbox API not available on < PHP 5.6');
+            return;
+        }
+        // Clear existing internal spans
+        dd_trace_serialize_closed_spans();
+
+        dd_trace_function('array_sum', function () {
+            // Do nothing
+        });
+        $tracer = new Tracer(new DebugTransport());
+        $span = $tracer->startSpan('foo');
+        array_sum([1, 2]);
+        $span->finish();
+
+        $this->assertSame(2, dd_trace_closed_spans_count());
+        $traces = $tracer->getTracesAsArray();
+        $this->assertCount(1, $traces);
+        $this->assertCount(2, $traces[0]);
     }
 }

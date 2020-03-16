@@ -1,6 +1,9 @@
 #ifndef DD_COMPATIBILITY_H
 #define DD_COMPATIBILITY_H
 
+#include <TSRM/TSRM.h>
+#include <Zend/zend.h>
+
 #define UNUSED_1(x) (void)(x)
 #define UNUSED_2(x, y) \
     do {               \
@@ -39,8 +42,25 @@
 #define PHP7_UNUSED(...) UNUSED(__VA_ARGS__)
 #endif
 
+#if PHP_VERSION_ID >= 70000 && PHP_VERSION_ID < 70300
+#define GC_ADDREF(x) (++GC_REFCOUNT(x))
+#define GC_DELREF(x) (--GC_REFCOUNT(x))
+#endif
+
 #if PHP_VERSION_ID < 70000
-typedef int32_t zend_long;
+#define ZVAL_VARARG_PARAM(list, arg_num) (*list[arg_num])
+#define IS_TRUE_P(x) (Z_TYPE_P(x) == IS_BOOL && Z_LVAL_P(x) == 1)
+#define COMPAT_RETVAL_STRING(c) RETVAL_STRING(c, 1)
+#else
+#define COMPAT_RETVAL_STRING(c) RETVAL_STRING(c)
+#define ZVAL_VARARG_PARAM(list, arg_num) (&(((zval*)list)[arg_num]))
+#define IS_TRUE_P(x) (Z_TYPE_P(x) == IS_TRUE)
+#endif
+
+#if PHP_VERSION_ID < 70000
+typedef zval ddtrace_exception_t;
+#else
+typedef zend_object ddtrace_exception_t;
 #endif
 
 #endif  // DD_COMPATIBILITY_H

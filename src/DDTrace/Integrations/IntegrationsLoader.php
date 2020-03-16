@@ -4,21 +4,33 @@ namespace DDTrace\Integrations;
 
 use DDTrace\Configuration;
 use DDTrace\Integrations\CakePHP\CakePHPIntegration;
+use DDTrace\Integrations\CodeIgniter\V2\CodeIgniterSandboxedIntegration;
 use DDTrace\Integrations\Curl\CurlIntegration;
 use DDTrace\Integrations\ElasticSearch\V1\ElasticSearchIntegration;
+use DDTrace\Integrations\ElasticSearch\V1\ElasticSearchSandboxedIntegration;
 use DDTrace\Integrations\Eloquent\EloquentIntegration;
+use DDTrace\Integrations\Eloquent\EloquentSandboxedIntegration;
 use DDTrace\Integrations\Guzzle\GuzzleIntegration;
 use DDTrace\Integrations\Laravel\LaravelIntegration;
+use DDTrace\Integrations\Laravel\LaravelSandboxedIntegration;
 use DDTrace\Integrations\Lumen\LumenIntegration;
 use DDTrace\Integrations\Memcached\MemcachedIntegration;
+use DDTrace\Integrations\Memcached\MemcachedSandboxedIntegration;
 use DDTrace\Integrations\Mongo\MongoIntegration;
+use DDTrace\Integrations\Mongo\MongoSandboxedIntegration;
 use DDTrace\Integrations\Mysqli\MysqliIntegration;
+use DDTrace\Integrations\Mysqli\MysqliSandboxedIntegration;
 use DDTrace\Integrations\PDO\PDOIntegration;
+use DDTrace\Integrations\PDO\PDOSandboxedIntegration;
 use DDTrace\Integrations\Predis\PredisIntegration;
 use DDTrace\Integrations\Slim\SlimIntegration;
 use DDTrace\Integrations\Symfony\SymfonyIntegration;
+use DDTrace\Integrations\Symfony\SymfonySandboxedIntegration;
 use DDTrace\Integrations\Web\WebIntegration;
+use DDTrace\Integrations\WordPress\WordPressSandboxedIntegration;
+use DDTrace\Integrations\Yii\YiiSandboxedIntegration;
 use DDTrace\Integrations\ZendFramework\ZendFrameworkIntegration;
+use DDTrace\Integrations\ZendFramework\ZendFrameworkSandboxedIntegration;
 use DDTrace\Log\LoggingTrait;
 
 /**
@@ -71,6 +83,35 @@ class IntegrationsLoader
     public function __construct(array $integrations)
     {
         $this->integrations = $integrations;
+        // Sandboxed integrations get loaded with a feature flag
+        if (Configuration::get()->isSandboxEnabled()) {
+            $this->integrations[CodeIgniterSandboxedIntegration::NAME] =
+                '\DDTrace\Integrations\CodeIgniter\V2\CodeIgniterSandboxedIntegration';
+            $this->integrations[ElasticSearchSandboxedIntegration::NAME] =
+                '\DDTrace\Integrations\ElasticSearch\V1\ElasticSearchSandboxedIntegration';
+            $this->integrations[EloquentSandboxedIntegration::NAME] =
+                '\DDTrace\Integrations\Eloquent\EloquentSandboxedIntegration';
+            $this->integrations[LaravelSandboxedIntegration::NAME] =
+                '\DDTrace\Integrations\Laravel\LaravelSandboxedIntegration';
+            $this->integrations[MemcachedSandboxedIntegration::NAME] =
+                '\DDTrace\Integrations\Memcached\MemcachedSandboxedIntegration';
+            $this->integrations[MongoSandboxedIntegration::NAME] =
+                '\DDTrace\Integrations\Mongo\MongoSandboxedIntegration';
+            $this->integrations[MysqliSandboxedIntegration::NAME] =
+                '\DDTrace\Integrations\Mysqli\MysqliSandboxedIntegration';
+            $this->integrations[PDOSandboxedIntegration::NAME] =
+                '\DDTrace\Integrations\PDO\PDOSandboxedIntegration';
+            if (\PHP_MAJOR_VERSION > 5) {
+                $this->integrations[SymfonySandboxedIntegration::NAME] =
+                    '\DDTrace\Integrations\Symfony\SymfonySandboxedIntegration';
+            }
+            $this->integrations[WordPressSandboxedIntegration::NAME] =
+                '\DDTrace\Integrations\WordPress\WordPressSandboxedIntegration';
+            $this->integrations[YiiSandboxedIntegration::NAME] =
+                '\DDTrace\Integrations\Yii\YiiSandboxedIntegration';
+            $this->integrations[ZendFrameworkSandboxedIntegration::NAME] =
+                '\DDTrace\Integrations\ZendFramework\ZendFrameworkSandboxedIntegration';
+        }
     }
 
     /**
@@ -121,7 +162,12 @@ class IntegrationsLoader
                 continue;
             }
 
-            $this->loadings[$name] = call_user_func([$class, 'load']);
+            if (strpos($class, 'SandboxedIntegration') !== false) {
+                $integration = new $class();
+                $this->loadings[$name] = $integration->init();
+            } else {
+                $this->loadings[$name] = $class::load();
+            }
             $this->logResult($name, $this->loadings[$name]);
         }
     }
@@ -180,6 +226,12 @@ class IntegrationsLoader
     public static function load()
     {
         self::get()->loadAll();
+    }
+
+    public static function reload()
+    {
+        self::$instance = null;
+        self::load();
     }
 
     public function reset()

@@ -5,8 +5,10 @@ namespace DDTrace\Tests\Integrations\CLI\Laravel\V5_8;
 use DDTrace\Tests\Common\SpanAssertion;
 use DDTrace\Tests\Integrations\CLI\CLITestCase;
 
-final class CommonScenariosTest extends CLITestCase
+class CommonScenariosTest extends CLITestCase
 {
+    const IS_SANDBOX = false;
+
     protected function getScriptLocation()
     {
         return __DIR__ . '/../../../../Frameworks/Laravel/Version_5_8/artisan';
@@ -23,7 +25,7 @@ final class CommonScenariosTest extends CLITestCase
     {
         $traces = $this->getTracesFromCommand();
 
-        $this->assertSpans($traces, [
+        $this->assertFlameGraph($traces, [
             SpanAssertion::build(
                 'laravel.artisan',
                 'artisan_test_app',
@@ -31,7 +33,12 @@ final class CommonScenariosTest extends CLITestCase
                 'artisan'
             )->withExactTags([
                 'integration.name' => 'laravel',
-            ])
+            ])->withChildren([
+                SpanAssertion::exists(
+                    'laravel.provider.load',
+                    'Illuminate\Foundation\ProviderRepository::load'
+                )->onlyIf(static::IS_SANDBOX),
+            ]),
         ]);
     }
 
@@ -39,7 +46,7 @@ final class CommonScenariosTest extends CLITestCase
     {
         $traces = $this->getTracesFromCommand('route:list');
 
-        $this->assertSpans($traces, [
+        $this->assertFlameGraph($traces, [
             SpanAssertion::build(
                 'laravel.artisan',
                 'artisan_test_app',
@@ -47,7 +54,12 @@ final class CommonScenariosTest extends CLITestCase
                 'artisan route:list'
             )->withExactTags([
                 'integration.name' => 'laravel',
-            ])
+            ])->withChildren([
+                SpanAssertion::exists(
+                    'laravel.provider.load',
+                    'Illuminate\Foundation\ProviderRepository::load'
+                )->onlyIf(static::IS_SANDBOX),
+            ]),
         ]);
     }
 
@@ -55,7 +67,7 @@ final class CommonScenariosTest extends CLITestCase
     {
         $traces = $this->getTracesFromCommand('foo:error');
 
-        $this->assertSpans($traces, [
+        $this->assertFlameGraph($traces, [
             SpanAssertion::build(
                 'laravel.artisan',
                 'artisan_test_app',
@@ -66,7 +78,12 @@ final class CommonScenariosTest extends CLITestCase
             ])->withExistingTagsNames([
                 'error.msg',
                 'error.stack'
-            ])->setError()
+            ])->withChildren([
+                SpanAssertion::exists(
+                    'laravel.provider.load',
+                    'Illuminate\Foundation\ProviderRepository::load'
+                )->onlyIf(static::IS_SANDBOX),
+            ])->setError(),
         ]);
     }
 }

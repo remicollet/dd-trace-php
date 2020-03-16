@@ -26,18 +26,49 @@ final class Bootstrap
         }
 
         self::$bootstrapped = true;
-        self::resetTracer();
-        self::initRootSpan();
+        $tracer = self::resetTracer();
+        self::initRootSpan($tracer);
         self::registerOpenTracing();
 
-        register_shutdown_function(function () {
+        $flushTracer = function () {
             dd_trace_disable_in_request(); //disable function tracing to speedup shutdown
 
             $tracer = GlobalTracer::get();
             $scopeManager = $tracer->getScopeManager();
             $scopeManager->close();
             $tracer->flush();
+        };
+        // Sandbox API is not supported on PHP 5.4
+        if (PHP_VERSION_ID < 50500) {
+            register_shutdown_function($flushTracer);
+            return;
+        }
+        dd_trace_method('DDTrace\\Bootstrap', 'flushTracerShutdown', [
+            'instrument_when_limited' => 1,
+            'posthook' => $flushTracer,
+        ]);
+
+        register_shutdown_function(function () {
+            /*
+             * Register the shutdown handler during shutdown so that it is run after all the other shutdown handlers.
+             * Doing this ensures:
+             * 1) Calls in shutdown hooks will still be instrumented
+             * 2) Fatal errors (or any zend_bailout) during flush will happen after the user's shutdown handlers
+             * Note: Other code that implements this same technique will be run _after_ the tracer shutdown.
+             */
+            register_shutdown_function(function () {
+                // We wrap the call in a closure to prevent OPcache from skipping the call.
+                Bootstrap::flushTracerShutdown();
+            });
         });
+    }
+
+    public static function flushTracerShutdown()
+    {
+        dd_trace_disable_in_request(); // Ensure no more calls are instrumented
+        // Flushing happens in the sandboxed tracing closure after the call.
+        // Return a value from runtime to prevent OPcache from skipping the call.
+        return mt_rand();
     }
 
     /**
@@ -51,10 +82,13 @@ final class Bootstrap
 
     /**
      * Reset the singleton tracer providing a brand new instance.
+     * @return Tracer
      */
     public static function resetTracer()
     {
-        GlobalTracer::set(new Tracer());
+        $tracer = new Tracer();
+        GlobalTracer::set($tracer);
+        return $tracer;
     }
 
     /**
@@ -79,37 +113,45 @@ final class Bootstrap
     /**
      * Initialize the root span
      *
+     * @param Tracer $tracer
      * @return void
      */
-    private static function initRootSpan()
+    private static function initRootSpan(Tracer $tracer)
     {
-        $tracer = GlobalTracer::get();
         $options = ['start_time' => Time::now()];
-        $startSpanOptions = 'cli' === PHP_SAPI
-            ? StartSpanOptions::create($options)
-            : StartSpanOptionsFactory::createForWebRequest(
-                $tracer,
-                $options,
-                Request::getHeaders()
-            );
-        $operationName = 'cli' === PHP_SAPI ? basename($_SERVER['argv'][0]) : 'web.request';
-        $span = $tracer->startRootSpan($operationName, $startSpanOptions)->getSpan();
+        if ('cli' === PHP_SAPI) {
+            $operationName = isset($_SERVER['argv'][0]) ? basename($_SERVER['argv'][0]) : 'cli.command';
+            $span = $tracer->startRootSpan(
+                $operationName,
+                StartSpanOptions::create($options)
+            )->getSpan();
+            $span->setTag(Tag::SPAN_TYPE, Type::CLI);
+        } else {
+            $operationName = 'web.request';
+            $span = $tracer->startRootSpan(
+                $operationName,
+                StartSpanOptionsFactory::createForWebRequest(
+                    $tracer,
+                    $options,
+                    Request::getHeaders()
+                )
+            )->getSpan();
+            $span->setTag(Tag::SPAN_TYPE, Type::WEB_SERVLET);
+            if (isset($_SERVER['REQUEST_METHOD'])) {
+                $span->setTag(Tag::HTTP_METHOD, $_SERVER['REQUEST_METHOD']);
+            }
+            if (isset($_SERVER['REQUEST_URI'])) {
+                $span->setTag(Tag::HTTP_URL, $_SERVER['REQUEST_URI']);
+            }
+            // Status code defaults to 200, will be later on changed when http_response_code will be called
+            $span->setTag(Tag::HTTP_STATUS_CODE, 200);
+        }
         $span->setIntegration(WebIntegration::getInstance());
         $span->setTraceAnalyticsCandidate();
         $span->setTag(
             Tag::SERVICE_NAME,
             Configuration::get()->appName($operationName)
         );
-        $span->setTag(
-            Tag::SPAN_TYPE,
-            'cli' === PHP_SAPI ? Type::CLI : Type::WEB_SERVLET
-        );
-        if ('cli' !== PHP_SAPI) {
-            $span->setTag(Tag::HTTP_METHOD, $_SERVER['REQUEST_METHOD']);
-            $span->setTag(Tag::HTTP_URL, $_SERVER['REQUEST_URI']);
-            // Status code defaults to 200, will be later on changed when http_response_code will be called
-            $span->setTag(Tag::HTTP_STATUS_CODE, 200);
-        }
 
         dd_trace('header', function () use ($span) {
             $args = func_get_args();
@@ -136,6 +178,19 @@ final class Bootstrap
 
             return $result;
         });
+
+        dd_trace('http_response_code', function () use ($span) {
+            $args = func_get_args();
+            if (isset($args[0])) {
+                $httpStatusCode = $args[0];
+
+                if (is_numeric($httpStatusCode)) {
+                    $span->setTag(Tag::HTTP_STATUS_CODE, $httpStatusCode);
+                }
+            }
+
+            return dd_trace_forward_call();
+        });
     }
 
     /**
@@ -148,9 +203,10 @@ final class Bootstrap
      */
     public static function parseStatusCode($headersLine)
     {
-        if (empty($headersLine)
-                || !is_string($headersLine)
-                || substr(strtoupper($headersLine), 0, 5) !== 'HTTP/'
+        if (
+            empty($headersLine)
+            || !is_string($headersLine)
+            || substr(strtoupper($headersLine), 0, 5) !== 'HTTP/'
         ) {
             return null;
         }

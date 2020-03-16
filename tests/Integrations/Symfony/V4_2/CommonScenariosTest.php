@@ -6,8 +6,10 @@ use DDTrace\Tests\Common\SpanAssertion;
 use DDTrace\Tests\Common\WebFrameworkTestCase;
 use DDTrace\Tests\Frameworks\Util\Request\RequestSpec;
 
-final class CommonScenariosTest extends WebFrameworkTestCase
+class CommonScenariosTest extends WebFrameworkTestCase
 {
+    const IS_SANDBOX = false;
+
     protected static function getAppIndexScript()
     {
         return __DIR__ . '/../../../Frameworks/Symfony/Version_4_2/public/index.php';
@@ -33,7 +35,7 @@ final class CommonScenariosTest extends WebFrameworkTestCase
             $this->call($spec);
         });
 
-        $this->assertExpectedSpans($this, $traces, $spanExpectations);
+        $this->assertFlameGraph($traces, $spanExpectations);
     }
 
     public function provideSpecs()
@@ -54,14 +56,19 @@ final class CommonScenariosTest extends WebFrameworkTestCase
                             'http.url' => 'http://localhost:9999/simple',
                             'http.status_code' => '200',
                             'integration.name' => 'symfony',
+                        ])
+                        ->withChildren([
+                            SpanAssertion::exists('symfony.kernel.handle')
+                                ->withChildren([
+                                    SpanAssertion::exists('symfony.kernel.request'),
+                                    SpanAssertion::exists('symfony.kernel.controller'),
+                                    SpanAssertion::exists('symfony.kernel.controller_arguments'),
+                                    SpanAssertion::exists('symfony.kernel.response'),
+                                    SpanAssertion::exists('symfony.kernel.finish_request'),
+                                ]),
+                            SpanAssertion::exists('symfony.kernel.terminate')->skipIf(!static::IS_SANDBOX),
                         ]),
-                    SpanAssertion::exists('symfony.kernel.handle'),
-                    SpanAssertion::exists('symfony.kernel.request'),
-                    SpanAssertion::exists('symfony.kernel.controller'),
-                    SpanAssertion::exists('symfony.kernel.controller_arguments'),
-                    SpanAssertion::exists('symfony.kernel.response'),
-                    SpanAssertion::exists('symfony.kernel.finish_request'),
-                    SpanAssertion::exists('symfony.kernel.terminate'),
+                    SpanAssertion::exists('symfony.kernel.terminate')->skipIf(static::IS_SANDBOX),
                 ],
                 'A simple GET request with a view' => [
                     SpanAssertion::build(
@@ -77,23 +84,28 @@ final class CommonScenariosTest extends WebFrameworkTestCase
                             'http.url' => 'http://localhost:9999/simple_view',
                             'http.status_code' => '200',
                             'integration.name' => 'symfony',
+                        ])
+                        ->withChildren([
+                            SpanAssertion::exists('symfony.kernel.handle')
+                                ->withChildren([
+                                    SpanAssertion::exists('symfony.kernel.request'),
+                                    SpanAssertion::exists('symfony.kernel.controller'),
+                                    SpanAssertion::exists('symfony.kernel.controller_arguments'),
+                                    SpanAssertion::build(
+                                        'symfony.templating.render',
+                                        'test_symfony_42',
+                                        'web',
+                                        'Twig\Environment twig_template.html.twig'
+                                    )
+                                        ->withExactTags([
+                                            'integration.name' => 'symfony',
+                                        ]),
+                                    SpanAssertion::exists('symfony.kernel.response'),
+                                    SpanAssertion::exists('symfony.kernel.finish_request'),
+                                ]),
+                            SpanAssertion::exists('symfony.kernel.terminate')->skipIf(!static::IS_SANDBOX),
                         ]),
-                    SpanAssertion::exists('symfony.kernel.handle'),
-                    SpanAssertion::exists('symfony.kernel.request'),
-                    SpanAssertion::exists('symfony.kernel.controller'),
-                    SpanAssertion::exists('symfony.kernel.controller_arguments'),
-                    SpanAssertion::build(
-                        'symfony.templating.render',
-                        'test_symfony_42',
-                        'web',
-                        'Twig\Environment twig_template.html.twig'
-                    )
-                        ->withExactTags([
-                            'integration.name' => 'symfony',
-                        ]),
-                    SpanAssertion::exists('symfony.kernel.response'),
-                    SpanAssertion::exists('symfony.kernel.finish_request'),
-                    SpanAssertion::exists('symfony.kernel.terminate'),
+                    SpanAssertion::exists('symfony.kernel.terminate')->skipIf(static::IS_SANDBOX),
                 ],
                 'A GET request with an exception' => [
                     SpanAssertion::build(
@@ -111,17 +123,26 @@ final class CommonScenariosTest extends WebFrameworkTestCase
                             'integration.name' => 'symfony',
                         ])
                         ->setError('Exception', 'An exception occurred')
-                        ->withExistingTagsNames(['error.stack']),
-                    SpanAssertion::exists('symfony.kernel.handle'),
-                    SpanAssertion::exists('symfony.kernel.request'),
-                    SpanAssertion::exists('symfony.kernel.controller'),
-                    SpanAssertion::exists('symfony.kernel.controller_arguments'),
-                    SpanAssertion::exists('symfony.kernel.handleException'),
-                    SpanAssertion::exists('symfony.kernel.exception'),
-                    SpanAssertion::exists('symfony.templating.render'),
-                    SpanAssertion::exists('symfony.kernel.response'),
-                    SpanAssertion::exists('symfony.kernel.finish_request'),
-                    SpanAssertion::exists('symfony.kernel.terminate'),
+                        ->withExistingTagsNames(['error.stack'])
+                        ->withChildren([
+                            SpanAssertion::exists('symfony.kernel.handle')
+                                ->withChildren([
+                                    SpanAssertion::exists('symfony.kernel.request'),
+                                    SpanAssertion::exists('symfony.kernel.controller'),
+                                    SpanAssertion::exists('symfony.kernel.controller_arguments'),
+                                    SpanAssertion::exists('symfony.kernel.handleException')
+                                        ->withChildren([
+                                            SpanAssertion::exists('symfony.kernel.exception')
+                                                ->withChildren([
+                                                    SpanAssertion::exists('symfony.templating.render'),
+                                                ]),
+                                            SpanAssertion::exists('symfony.kernel.response'),
+                                            SpanAssertion::exists('symfony.kernel.finish_request'),
+                                        ]),
+                                ]),
+                            SpanAssertion::exists('symfony.kernel.terminate')->skipIf(!static::IS_SANDBOX),
+                        ]),
+                    SpanAssertion::exists('symfony.kernel.terminate')->skipIf(static::IS_SANDBOX),
                 ],
             ]
         );

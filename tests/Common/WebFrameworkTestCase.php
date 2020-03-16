@@ -3,7 +3,6 @@
 namespace DDTrace\Tests\Common;
 
 use DDTrace\Tests\Frameworks\Util\CommonScenariosDataProviderTrait;
-use DDTrace\Tests\Frameworks\Util\Request\GetSpec;
 use DDTrace\Tests\Frameworks\Util\Request\RequestSpec;
 use DDTrace\Tests\WebServer;
 
@@ -49,13 +48,19 @@ abstract class WebFrameworkTestCase extends IntegrationTestCase
      */
     protected static function getEnvs()
     {
-        return [
+        $envs = [
             'DD_TEST_INTEGRATION' => 'true',
             'DD_TRACE_ENCODER' => 'json',
             'DD_TRACE_AGENT_TIMEOUT' => '10000',
             'DD_TRACE_AGENT_CONNECT_TIMEOUT' => '10000',
             'DD_TRACE_URL_AS_RESOURCE_NAMES_ENABLED' => 'true',
         ];
+
+        if (!self::isSandboxed()) {
+            $envs['DD_TRACE_SANDBOX_ENABLED'] = 'false';
+        }
+
+        return $envs;
     }
 
     /**
@@ -107,12 +112,11 @@ abstract class WebFrameworkTestCase extends IntegrationTestCase
      */
     protected function call(RequestSpec $spec)
     {
-        $url = 'http://localhost:' . self::PORT . $spec->getPath();
-        if ($spec instanceof GetSpec) {
-            return $this->sendRequest('GET', $url);
-        }
-
-        $this->fail('Unhandled request spec type');
+        return $this->sendRequest(
+            $spec->getMethod(),
+            'http://localhost:' . self::PORT . $spec->getPath(),
+            $spec->getHeaders()
+        );
     }
 
     /**
@@ -120,13 +124,17 @@ abstract class WebFrameworkTestCase extends IntegrationTestCase
      *
      * @param string $method
      * @param string $url
+     * @param string[] $headers
      * @return mixed|null
      */
-    protected function sendRequest($method, $url)
+    protected function sendRequest($method, $url, $headers = [])
     {
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
+        if ($headers) {
+            curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        }
         $response = curl_exec($ch);
 
         if ($response === false) {

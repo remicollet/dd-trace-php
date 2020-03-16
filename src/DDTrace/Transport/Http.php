@@ -9,6 +9,7 @@ use DDTrace\GlobalTracer;
 use DDTrace\Log\LoggingTrait;
 use DDTrace\Sampling\PrioritySampling;
 use DDTrace\Transport;
+use DDTrace\Util\ContainerInfo;
 
 final class Http implements Transport
 {
@@ -28,6 +29,8 @@ final class Http implements Transport
     const DEFAULT_TRACE_AGENT_PORT = '8126';
     const DEFAULT_TRACE_AGENT_PATH = '/v0.3/traces';
     const PRIORITY_SAMPLING_TRACE_AGENT_PATH = '/v0.4/traces';
+
+    /* Keep these in sync with configuration.h's values */
     const DEFAULT_AGENT_CONNECT_TIMEOUT = 100;
     const DEFAULT_AGENT_TIMEOUT = 500;
 
@@ -55,7 +58,12 @@ final class Http implements Transport
         $this->setHeader('Datadog-Meta-Lang', 'php');
         $this->setHeader('Datadog-Meta-Lang-Version', \PHP_VERSION);
         $this->setHeader('Datadog-Meta-Lang-Interpreter', \PHP_SAPI);
-        $this->setHeader('Datadog-Meta-Tracer-Version', \DDTrace\Tracer::VERSION);
+        $this->setHeader('Datadog-Meta-Tracer-Version', DD_TRACE_VERSION);
+
+        $containerInfo = new ContainerInfo();
+        if ($containerId = $containerInfo->getContainerId()) {
+            $this->setHeader('Datadog-Container-Id', $containerId);
+        }
     }
 
     /**
@@ -82,19 +90,16 @@ final class Http implements Transport
      */
     public function send(Tracer $tracer)
     {
-        if ($this->isLogDebugActive() && function_exists('dd_tracer_circuit_breaker_info')) {
-            self::logDebug('circuit breaker status: closed => {closed}, total_failures => {total_failures},'
-            . 'consecutive_failures => {consecutive_failures}, opened_timestamp => {opened_timestamp}, '
-            . 'last_failure_timestamp=> {last_failure_timestamp}', dd_tracer_circuit_breaker_info());
-        }
-
-        if (function_exists('dd_tracer_circuit_breaker_can_try') && !dd_tracer_circuit_breaker_can_try()) {
-            self::logError('Reporting of spans skipped due to open circuit breaker');
-            return;
-        }
-
+        $tracesCount = $tracer->getTracesCount();
         $tracesPayload = $this->encoder->encodeTraces($tracer);
-        self::logDebug('About to send trace(s) to the agent');
+
+        if ($tracesCount === 0) {
+            self::logDebug('No finished traces to be sent to the agent');
+            /* We should short-circuit here so the agent is never bothered, but
+             * at time of writing tests were depending on existing behavior.
+             * return;
+             */
+        }
 
         // We keep the endpoint configuration option for backward compatibility instead of moving to an 'agent base url'
         // concept, but this should be probably revisited in the future.
@@ -104,7 +109,9 @@ final class Http implements Transport
             $this->config['endpoint']
         ) : $this->config['endpoint'];
 
-        $this->sendRequest($endpoint, $this->headers, $tracesPayload);
+        self::logDebug('About to send trace(s) to the agent');
+
+        $this->sendRequest($endpoint, $this->headers, $tracesPayload, $tracesCount);
     }
 
     public function setHeader($key, $value)
@@ -117,7 +124,7 @@ final class Http implements Transport
         return $this->config;
     }
 
-    private function sendRequest($url, array $headers, $body)
+    private function sendRequest($url, array $headers, $body, $tracesCount)
     {
         $bodySize = strlen($body);
         // The 10MB payload cap is inclusive, thus we use >, not >=
@@ -128,6 +135,52 @@ final class Http implements Transport
             ]);
             return;
         }
+
+        $curlHeaders = [];
+
+        /* Curl will add Expect: 100-continue if it is a POST over a certain size. The trouble is that CURL will
+         * wait for *1 second* for 100 Continue response before sending the rest of the data. This wait is
+         * configurable, but requires a newer curl than we have on CentOS 6. So instead we send an empty Expect.
+         */
+        if (!isset($headers['Expect'])) {
+            $curlHeaders[] = "Expect:";
+        }
+
+        foreach ($headers as $key => $value) {
+            $curlHeaders[] = "$key: $value";
+        }
+
+        if (
+            (
+                \dd_trace_env_config('DD_TRACE_BETA_SEND_TRACES_VIA_THREAD')
+                || \dd_trace_env_config('DD_TRACE_BGS_ENABLED')
+            )
+            && $this->encoder->getContentType() === 'application/msgpack'
+            && \dd_trace_send_traces_via_thread($tracesCount, $curlHeaders, $body)
+        ) {
+            return;
+        }
+
+        if ($this->isLogDebugActive() && function_exists('dd_tracer_circuit_breaker_info')) {
+            self::logDebug('circuit breaker status: closed => {closed}, total_failures => {total_failures},'
+            . 'consecutive_failures => {consecutive_failures}, opened_timestamp => {opened_timestamp}, '
+            . 'last_failure_timestamp=> {last_failure_timestamp}', dd_tracer_circuit_breaker_info());
+        }
+
+        if (function_exists('dd_tracer_circuit_breaker_can_try') && !dd_tracer_circuit_breaker_can_try()) {
+            self::logError('Reporting of spans skipped due to open circuit breaker');
+            return;
+        }
+
+        $curlHeaders = \array_merge(
+            $curlHeaders,
+            [
+                'Content-Type: ' . $this->encoder->getContentType(),
+                'Content-Length: ' . $bodySize,
+                'X-Datadog-Trace-Count: ' . $tracesCount,
+            ]
+        );
+
         $handle = curl_init($url);
         curl_setopt($handle, CURLOPT_POST, true);
         curl_setopt($handle, CURLOPT_POSTFIELDS, $body);
@@ -135,20 +188,42 @@ final class Http implements Transport
         curl_setopt($handle, CURLOPT_TIMEOUT_MS, $this->config['timeout']);
         curl_setopt($handle, CURLOPT_CONNECTTIMEOUT_MS, $this->config['connect_timeout']);
 
-        $curlHeaders = [
-            'Content-Type: ' . $this->encoder->getContentType(),
-            'Content-Length: ' . $bodySize,
-        ];
-        foreach ($headers as $key => $value) {
-            $curlHeaders[] = "$key: $value";
+        $isDebugEnabled = Configuration::get()->isDebugModeEnabled();
+        if ($isDebugEnabled) {
+            $verbose = \fopen('php://temp', 'w+b');
+            \curl_setopt($handle, \CURLOPT_VERBOSE, true);
+            \curl_setopt($handle, \CURLOPT_STDERR, $verbose);
         }
+
         curl_setopt($handle, CURLOPT_HTTPHEADER, $curlHeaders);
 
         if (($response = curl_exec($handle)) === false) {
-            self::logError('Reporting of spans failed: {num} / {error}', [
+            $curlTimedout =  \version_compare(\PHP_VERSION, '5.5', '<')
+                ? \CURLE_OPERATION_TIMEOUTED
+                : \CURLE_OPERATION_TIMEDOUT;
+            $errno = \curl_errno($handle);
+            $extra = '';
+            if ($errno === $curlTimedout) {
+                $timeout = $this->config['timeout'];
+                $connectTimeout = $this->config['connect_timeout'];
+                $extra = " (TIMEOUT_MS={$timeout}, CONNECTTIMEOUT_MS={$connectTimeout})";
+            }
+            self::logError('Reporting of spans failed: {num} / {error}{extra}', [
                 'error' => curl_error($handle),
-                'num' => curl_errno($handle),
+                'num' => $errno,
+                'extra' => $extra,
             ]);
+
+            if ($isDebugEnabled && isset($verbose)) {
+                @\rewind($verbose);
+                $verboseLog = @\stream_get_contents($verbose);
+                if ($verboseLog !== false) {
+                    self::logError($verboseLog);
+                } else {
+                    self::logError("Error while retrieving curl error log");
+                }
+            }
+
             function_exists('dd_tracer_circuit_breaker_register_error') && dd_tracer_circuit_breaker_register_error();
 
             return;

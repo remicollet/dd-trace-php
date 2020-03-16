@@ -14,17 +14,8 @@ use Symfony\Component\HttpKernel\Bundle\Bundle;
 use Symfony\Component\HttpKernel\KernelEvents;
 
 /**
- * DataDog Symfony tracing bundle. Use by installing the dd-trace library:
- *
- * composer require datadog/dd-trace
- *
- * And then add the bundle in app/AppKernel.php:
- *
- *         $bundles = [
- *             // ...
- *             new DDTrace\Integrations\SymfonyBundle(),
- *             // ...
- *         ];
+ * @deprecated: this class is deprecated and should not be added to the list of bundles. Automatic instrumentation
+ * from a long time does not require adding any bundle as tracing is done automatically.
  */
 class SymfonyBundle extends Bundle
 {
@@ -195,7 +186,11 @@ class SymfonyBundle extends Bundle
     public static function injectRouteInfo($args, $request, Span $requestSpan)
     {
         $eventName = $args[0];
-        if ($eventName !== KernelEvents::CONTROLLER_ARGUMENTS) {
+        if (defined("KernelEvents::CONTROLLER_ARGUMENTS")) {
+            if ($eventName !== KernelEvents::CONTROLLER_ARGUMENTS) {
+                return;
+            }
+        } elseif ($eventName !== KernelEvents::CONTROLLER) {
             return;
         }
 
@@ -207,7 +202,8 @@ class SymfonyBundle extends Bundle
         // Controller and action is provided in the form [$controllerInstance, <actionMethodName>]
         $controllerAndAction = $event->getController();
 
-        if (!is_array($controllerAndAction)
+        if (
+            !is_array($controllerAndAction)
             || count($controllerAndAction) !== 2
             || !is_object($controllerAndAction[0])
         ) {

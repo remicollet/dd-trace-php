@@ -13,6 +13,13 @@ class Configuration extends AbstractConfiguration
     use LoggingTrait;
 
     /**
+     * Parsing sampling rules might be expensive so we cache values the first time we parse them.
+     *
+     * @var array
+     */
+    private $samplingRulesCache;
+
+    /**
      * Whether or not tracing is enabled.
      *
      * @return bool
@@ -64,20 +71,6 @@ class Configuration extends AbstractConfiguration
     }
 
     /**
-     * Created Spans limit - integrations can still create spans above this limit but
-     * those should be guaranteed to be low volume.
-     *
-     * -1 means no limit
-     *
-     * @return int
-     */
-    public function getSpansLimit()
-    {
-        return (int)$this->floatValue('spans.limit', 1000);
-    }
-
-
-    /**
      * Whether or not also unfinished spans should be finished (and thus sent) when tracer is flushed.
      * Motivation: We had users reporting that in some cases they have manual end-points that `echo` some content and
      * then just `exit(0)` at the end of action's method. While the shutdown hook that flushes traces would still be
@@ -98,7 +91,58 @@ class Configuration extends AbstractConfiguration
      */
     public function getSamplingRate()
     {
-        return $this->floatValue('sampling.rate', 1.0, 0.0, 1.0);
+        // DD_SAMPLING_RATE is deprecated and will be removed in 0.40.0
+        $deprecatedValue = $this->floatValue('sampling.rate', 1.0, 0.0, 1.0);
+        return $this->floatValue('trace.sample.rate', $deprecatedValue, 0.0, 1.0);
+    }
+
+    /**
+     * Returns the sampling rules defined for the current service.
+     * Results are cached so it is perfectly fine to call this method multiple times.
+     * The expected format for sampling rule env variable is:
+     * - example: DD_TRACE_SAMPLING_RULES=[]
+     *        --> sample rate is 100%
+     * - example: DD_TRACE_SAMPLING_RULES=[{"sample_rate": 0.2}]
+     *        --> sample rate is 20%
+     * - example: DD_TRACE_SAMPLING_RULES=[{"service": "a.*", "name": "b", "sample_rate": 0.1}, {"sample_rate": 0.2}]
+     *        --> sample rate is 20% except for spans of service starting with 'a' and with name 'b' where rate is 10%
+     *
+     * Note that 'service' and 'name' is optional when when omitted the '*' pattern is assumed.
+     *
+     * @return array
+     */
+    public function getSamplingRules()
+    {
+        if (null !== $this->samplingRulesCache) {
+            return $this->samplingRulesCache;
+        }
+
+        $this->samplingRulesCache = [];
+
+        $parsed = \json_decode($this->stringValue('trace.sampling.rules'), true);
+        if (false === $parsed) {
+            $parsed = [];
+        }
+
+        // We do a proper parsing here to make sure that once the sampling rules leave this method
+        // they are always properly defined.
+        if (is_array($parsed)) {
+            foreach ($parsed as $rule) {
+                if (!is_array($rule) || !isset($rule['sample_rate'])) {
+                    continue;
+                }
+                $service = isset($rule['service']) ? strval($rule['service']) : '.*';
+                $name = isset($rule['name']) ? strval($rule['name']) : '.*';
+                $rate = isset($rule['sample_rate']) ? floatval($rule['sample_rate']) : 1.0;
+                $this->samplingRulesCache[] = [
+                    'service' => $service,
+                    'name' => $name,
+                    'sample_rate' => $rate,
+                ];
+            }
+        }
+
+        return $this->samplingRulesCache;
     }
 
     /**
@@ -138,6 +182,30 @@ class Configuration extends AbstractConfiguration
     public function isURLAsResourceNameEnabled()
     {
         return $this->boolValue('trace.url.as.resource.names.enabled', false);
+    }
+
+    /**
+     * Set URL hostname as service name
+     *
+     * @return bool
+     */
+    public function isHttpClientSplitByDomain()
+    {
+        return $this->boolValue('trace.http.client.split.by.domain', false);
+    }
+
+    /**
+     * Whether or not sandboxed tracing closures are enabled.
+     *
+     * @return bool
+     */
+    public function isSandboxEnabled()
+    {
+        // Sandbox API not available on < PHP 5.6 yet
+        if (PHP_VERSION_ID < 50600) {
+            return false;
+        }
+        return $this->boolValue('trace.sandbox.enabled', true);
     }
 
     /**

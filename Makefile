@@ -4,15 +4,18 @@ BUILD_DIR := tmp/build_$(BUILD_SUFFIX)
 SO_FILE := $(BUILD_DIR)/modules/ddtrace.so
 WALL_FLAGS := -Wall -Wextra
 CFLAGS := -O2 $(WALL_FLAGS)
-VERSION:=$(shell cat src/DDTrace/Tracer.php | grep VERSION | awk '{print $$NF}' | cut -d\' -f2)
-VERSION_WITHOUT_SUFFIX:=$(shell cat src/DDTrace/Tracer.php | grep VERSION | awk '{print $$NF}' | cut -d\' -f2 | cut -d- -f1)
+ROOT_DIR:=$(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
+
+VERSION:=$(shell cat src/DDTrace/version.php | grep return | awk '{print $$2}' | cut -d\' -f2)
+VERSION_WITHOUT_SUFFIX:=$(shell cat src/DDTrace/version.php | grep return | awk '{print $$2}' | cut -d\' -f2 | cut -d- -f1)
 
 INI_FILE := /usr/local/etc/php/conf.d/ddtrace.ini
 
-C_FILES := $(shell find src/ext -name '*.c' -o -name '*.h' | awk '{ printf "$(BUILD_DIR)/%s\n", $$1 }' )
+C_FILES := $(shell find src/{dogstatsd,ext} -name '*.c' -o -name '*.h' | awk '{ printf "$(BUILD_DIR)/%s\n", $$1 }' )
 TEST_FILES := $(shell find tests/ext -name '*.php*' | awk '{ printf "$(BUILD_DIR)/%s\n", $$1 }' )
+M4_FILES := $(shell find m4 -name '*.m4*' | awk '{ printf "$(BUILD_DIR)/%s\n", $$1 }' )
 
-ALL_FILES := $(C_FILES) $(TEST_FILES) $(BUILD_DIR)/config.m4
+ALL_FILES := $(C_FILES) $(TEST_FILES) $(BUILD_DIR)/config.m4 $(M4_FILES)
 
 $(BUILD_DIR)/%: %
 	$(Q) echo Copying $* to build dir
@@ -23,6 +26,8 @@ JUNIT_RESULTS_DIR := $(shell pwd)
 
 all: $(BUILD_DIR)/configure $(SO_FILE)
 Q := @
+
+$(BUILD_DIR)/config.m4: $(M4_FILES)
 
 $(BUILD_DIR)/configure: $(BUILD_DIR)/config.m4
 	$(Q) (cd $(BUILD_DIR); phpize)
@@ -43,11 +48,23 @@ install_ini: $(INI_FILE)
 
 install_all: install install_ini
 
+test_c: export DD_TRACE_CLI_ENABLED=1
 test_c: $(SO_FILE)
-	$(MAKE) -C $(BUILD_DIR) test TESTS="-q --show-all $(TESTS)"
+	$(MAKE) -C $(BUILD_DIR) test TESTS="-q --show-all -d ddtrace.request_init_hook=$(ROOT_DIR)/bridge/dd_wrap_autoloader.php $(TESTS)"
 
+test_c_mem: export DD_TRACE_CLI_ENABLED=1
 test_c_mem: $(SO_FILE)
-	$(MAKE) -C $(BUILD_DIR) test TESTS="-q --show-all -m $(TESTS)"
+	$(MAKE) -C $(BUILD_DIR) test TESTS="-q --show-all -d ddtrace.request_init_hook=$(ROOT_DIR)/bridge/dd_wrap_autoloader.php -m $(TESTS)"
+
+test_c_asan: export DD_TRACE_CLI_ENABLED=1
+test_c_asan: $(SO_FILE)
+	( \
+	set -xe; \
+	export REPORT_EXIT_STATUS=1; \
+	\
+	export TEST_PHP_JUNIT=$(JUNIT_RESULTS_DIR)/asan-extension-test.xml; \
+	$(MAKE) -C $(BUILD_DIR) CFLAGS="-g -fsanitize=address" LDFLAGS="-fsanitize=address" clean test  TESTS="-q --asan --show-all $(TESTS)" && grep -e 'errors="0"' $$TEST_PHP_JUNIT; \
+	)
 
 test_extension_ci: $(SO_FILE)
 	( \
@@ -58,7 +75,8 @@ test_extension_ci: $(SO_FILE)
 	$(MAKE) -C $(BUILD_DIR) test  TESTS="-q --show-all $(TESTS)" && grep -e 'errors="0"' $$TEST_PHP_JUNIT; \
 	\
 	export TEST_PHP_JUNIT=$(JUNIT_RESULTS_DIR)/valgrind-extension-test.xml; \
-	$(MAKE) -C $(BUILD_DIR) test  TESTS="-q  -m --show-all $(TESTS)" && grep -e 'errors="0"' $$TEST_PHP_JUNIT; \
+	export TEST_PHP_OUTPUT=$(JUNIT_RESULTS_DIR)/valgrind-run-tests.out; \
+	$(MAKE) -C $(BUILD_DIR) CFLAGS="-g" clean test  TESTS="-q -m -s $$TEST_PHP_OUTPUT --show-all $(TESTS)" && grep -e 'errors="0"' $$TEST_PHP_JUNIT  && ! grep -e 'LEAKED TEST SUMMARY' $$TEST_PHP_OUTPUT; \
 	)
 
 test_integration: install_ini
@@ -85,14 +103,17 @@ clang_find_files_to_lint:
 	-path ./vendor -prune -o \
 	-path ./tests -prune -o \
 	-path ./src/ext/mpack -prune -o \
+	-path ./src/ext/third-party -prune -o \
 	-iname "*.h" -o -iname "*.c" \
 	-type f
 
+CLANG_FORMAT := clang-format-6.0
+
 clang_format_check:
 	@while read fname; do \
-		changes=$$(clang-format-6.0 -output-replacements-xml $$fname | grep -c "<replacement " || true); \
+		changes=$$($(CLANG_FORMAT) -output-replacements-xml $$fname | grep -c "<replacement " || true); \
 		if [ $$changes != 0 ]; then \
-			clang-format-6.0 -output-replacements-xml $$fname; \
+			$(CLANG_FORMAT) -output-replacements-xml $$fname; \
 			echo "$$fname did not pass clang-format, consider running: make clang_format_fix"; \
 			touch .failure; \
 		fi \
@@ -123,7 +144,7 @@ $(PACKAGES_BUILD_DIR):
 .rpm: $(PACKAGES_BUILD_DIR)
 	fpm -p $(PACKAGES_BUILD_DIR) -t rpm $(FPM_OPTS) $(FPM_FILES)
 .apk: $(PACKAGES_BUILD_DIR)
-	fpm -p $(PACKAGES_BUILD_DIR) -t apk $(FPM_OPTS) --depends=libc6-compat --depends=bash $(FPM_FILES)
+	fpm -p $(PACKAGES_BUILD_DIR) -t apk $(FPM_OPTS) --depends=libc6-compat --depends=bash --depends=libexecinfo $(FPM_FILES)
 .tar.gz: $(PACKAGES_BUILD_DIR)
 	fpm -p $(PACKAGES_BUILD_DIR)/$(PACKAGE_NAME)-$(VERSION).x86_64.tar.gz -t tar $(FPM_OPTS) $(FPM_FILES)
 
@@ -139,16 +160,11 @@ verify_pecl_file_definitions:
 	@echo "PECL file definitions are correct"
 
 verify_version:
-	@grep -q "<release>$(VERSION_WITHOUT_SUFFIX)</release>" package.xml || (echo package.xml release version missmatch && exit 1)
-	@grep -q "<api>$(VERSION_WITHOUT_SUFFIX)</api>" package.xml || (echo package.xml api version missmatch && exit 1)
 	@grep -q "#define PHP_DDTRACE_VERSION \"$(VERSION)" src/ext/version.h || (echo src/ext/version.h Version missmatch && exit 1)
+	@grep -q "const VERSION = '$(VERSION)" src/DDTrace/Tracer.php || (echo src/DDTrace/Tracer.php Version missmatch && exit 1)
 	@echo "All version files match"
 
-verify_package_xml:
-	@pear package-validate package.xml
-	@echo "The package.xml file is valid"
-
-verify_all: verify_pecl_file_definitions verify_version verify_package_xml
+verify_all: verify_pecl_file_definitions verify_version
 
 .PHONY: dist_clean clean all clang_format_check clang_format_fix install sudo_install test_c test_c_mem test_extension_ci test test_integration install_ini install_all \
 	.apk .rpm .deb .tar.gz sudo debug strict run-tests.php verify_pecl_file_definitions verify_version verify_package_xml verify_all

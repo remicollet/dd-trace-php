@@ -1,3 +1,5 @@
+#include "circuit_breaker.h"
+
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -7,8 +9,9 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "circuit_breaker.h"
+#include "configuration.h"
 #include "env_config.h"
+#include "macros.h"
 
 dd_trace_circuit_breaker_t *dd_trace_circuit_breaker = NULL;
 
@@ -22,8 +25,10 @@ dd_trace_circuit_breaker_t local_dd_trace_circuit_breaker = {{0}};
 dd_trace_circuit_breaker_t local_dd_trace_circuit_breaker = {0};
 #endif
 
-static void handle_perpare_error(const char *call_name) {
-    perror(call_name);
+static void handle_prepare_error(const char *call_name) {
+    if (get_dd_trace_debug()) {
+        perror(call_name);
+    }
 
     if (!dd_trace_circuit_breaker) {
         // if shared memory is not working use local copy
@@ -35,7 +40,7 @@ static void prepare_cb() {
     if (!dd_trace_circuit_breaker) {
         int shm_fd = shm_open(DD_TRACE_CIRCUIT_BREAKER_SHMEM_KEY, O_CREAT | O_RDWR, 0666);
         if (shm_fd < 0) {
-            handle_perpare_error("shm_open");
+            handle_prepare_error("shm_open");
             return;
         }
 
@@ -43,13 +48,13 @@ static void prepare_cb() {
         // fetch stat with shmem size
         struct stat stats;
         if (fstat(shm_fd, &stats) != 0) {
-            handle_perpare_error("fstat");
+            handle_prepare_error("fstat");
             return;
         }
         // do the resize if size is too small
         if (stats.st_size < 0 || (size_t)stats.st_size < sizeof(dd_trace_circuit_breaker_t)) {
             if (ftruncate(shm_fd, sizeof(dd_trace_circuit_breaker_t)) != 0) {
-                handle_perpare_error("ftruncate");
+                handle_prepare_error("ftruncate");
                 return;
             }
         }
@@ -57,7 +62,7 @@ static void prepare_cb() {
         dd_trace_circuit_breaker_t *shared_breaker =
             mmap(NULL, sizeof(dd_trace_circuit_breaker_t), PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
         if (shared_breaker == MAP_FAILED) {
-            handle_perpare_error("mmap");
+            handle_prepare_error("mmap");
 
             return;
         }
@@ -73,28 +78,28 @@ static uint64_t current_timestamp_monotonic_usec() {
     return t.tv_sec * 1000 * 1000 + t.tv_nsec / 1000;
 }
 
-static int64_t get_max_consecutive_failures() {
+static int64_t get_max_consecutive_failures(TSRMLS_D) {
     return ddtrace_get_int_config(DD_TRACE_CIRCUIT_BREAKER_ENV_MAX_CONSECUTIVE_FAILURES,
-                                  DD_TRACE_CIRCUIT_BREAKER_DEFAULT_MAX_CONSECUTIVE_FAILURES);
+                                  DD_TRACE_CIRCUIT_BREAKER_DEFAULT_MAX_CONSECUTIVE_FAILURES TSRMLS_CC);
 }
 
-static int64_t get_retry_time_usec() {
+static int64_t get_retry_time_usec(TSRMLS_D) {
     return ddtrace_get_int_config(DD_TRACE_CIRCUIT_BREAKER_ENV_RETRY_TIME_MSEC,
-                                  DD_TRACE_CIRCUIT_BREAKER_DEFAULT_RETRY_TIME_MSEC) *
+                                  DD_TRACE_CIRCUIT_BREAKER_DEFAULT_RETRY_TIME_MSEC TSRMLS_CC) *
            1000;
 }
 
-uint32_t dd_tracer_circuit_breaker_can_try() {
+uint32_t dd_tracer_circuit_breaker_can_try(TSRMLS_D) {
     if (dd_tracer_circuit_breaker_is_closed()) {
         return 1;
     }
     uint64_t last_failure_timestamp = atomic_load(&dd_trace_circuit_breaker->last_failure_timestamp);
     uint64_t current_time = current_timestamp_monotonic_usec();
 
-    return (last_failure_timestamp + get_retry_time_usec()) <= current_time;
+    return (last_failure_timestamp + get_retry_time_usec(TSRMLS_C)) <= current_time;
 }
 
-void dd_tracer_circuit_breaker_register_error() {
+void dd_tracer_circuit_breaker_register_error(TSRMLS_D) {
     prepare_cb();
 
     atomic_fetch_add(&dd_trace_circuit_breaker->consecutive_failures, 1);
@@ -104,7 +109,7 @@ void dd_tracer_circuit_breaker_register_error() {
 
     // if circuit breaker is closed attempt to open it if consecutive failures are higher thatn the threshold
     if (dd_tracer_circuit_breaker_is_closed()) {
-        if (atomic_load(&dd_trace_circuit_breaker->consecutive_failures) >= get_max_consecutive_failures()) {
+        if (atomic_load(&dd_trace_circuit_breaker->consecutive_failures) >= get_max_consecutive_failures(TSRMLS_C)) {
             dd_tracer_circuit_breaker_open();
         }
     }
