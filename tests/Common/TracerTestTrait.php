@@ -10,7 +10,10 @@ use DDTrace\Tests\DebugTransport;
 use DDTrace\Tracer;
 use DDTrace\Transport\Http;
 use DDTrace\GlobalTracer;
-use DDTrace\Integrations\Web\WebIntegration;
+use DDTrace\Tests\Frameworks\Util\Request\GetSpec;
+use DDTrace\Tests\Frameworks\Util\Request\RequestSpec;
+use DDTrace\Tests\WebServer;
+use Exception;
 use PHPUnit\Framework\TestCase;
 
 trait TracerTestTrait
@@ -22,12 +25,12 @@ trait TracerTestTrait
      * @param null $tracer
      * @return array[]
      */
-    public function isolateTracer($fn, $tracer = null)
+    public function isolateTracer($fn, $tracer = null, $config = [])
     {
         // Reset the current C-level array of generated spans
         dd_trace_serialize_closed_spans();
         $transport = new DebugTransport();
-        $tracer = $tracer ?: new Tracer($transport);
+        $tracer = $tracer ?: new Tracer($transport, null, $config);
         GlobalTracer::set($tracer);
 
         $fn($tracer);
@@ -99,6 +102,9 @@ trait TracerTestTrait
         // Clearing existing dumped file
         $this->resetRequestDumper();
 
+        // Reset the current C-level array of generated spans
+        dd_trace_serialize_closed_spans();
+
         $transport = new Http(new Json(), ['endpoint' => self::$agentRequestDumperUrl]);
 
         /* Disable Expect: 100-Continue that automatically gets added by curl,
@@ -117,6 +123,33 @@ trait TracerTestTrait
 
         // Checking that spans belong to the correct integrations.
         $this->assertSpansBelongsToProperIntegration($this->readTraces($tracer));
+
+        return $this->parseTracesFromDumpedData();
+    }
+
+    /**
+     * This method executes a request into an ad-hoc web server configured with the provided envs and inis that is
+     * created and destroyed with the scope of this test.
+     */
+    public function inWebServer($fn, $rootPath, $envs = [], $inis = [])
+    {
+        $webServer = new WebServer($rootPath, '0.0.0.0', 6666);
+        $webServer->mergeEnvs($envs);
+        $webServer->mergeInis($inis);
+        $webServer->start();
+
+        $fn(function (RequestSpec $request) use ($webServer) {
+            if ($request instanceof GetSpec) {
+                $curl =  curl_init('http://127.0.0.1:6666' . $request->getPath());
+                curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+                $response = curl_exec($curl);
+                $webServer->stop();
+                return $response;
+            }
+
+            $webServer->stop();
+            throw new Exception('Spec type not supported.');
+        });
 
         return $this->parseTracesFromDumpedData();
     }
@@ -158,10 +191,22 @@ trait TracerTestTrait
      */
     private function parseTracesFromDumpedData()
     {
-        // Retrieving data
-        $curl =  curl_init(self::$agentRequestDumperUrl . '/replay');
-        curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
-        $response = curl_exec($curl);
+        // When tests run with the background sender enabled, there might be some delay between when a trace is flushed
+        // and actually sent. While we should find a smart way to tackle this, for now we do it quick and dirty, in a
+        // for loop.
+        for ($attemptNumber = 1; $attemptNumber <= 20; $attemptNumber++) {
+            $curl =  curl_init(self::$agentRequestDumperUrl . '/replay');
+            curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+            // Retrieving data
+            $response = curl_exec($curl);
+            if (!$response) {
+                \usleep(50 * 1000); // Waiting for 50 ms
+                continue;
+            } else {
+                break;
+            }
+        }
+
         if (!$response) {
             return [];
         }

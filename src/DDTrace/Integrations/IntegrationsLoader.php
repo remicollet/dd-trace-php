@@ -6,11 +6,13 @@ use DDTrace\Configuration;
 use DDTrace\Integrations\CakePHP\CakePHPIntegration;
 use DDTrace\Integrations\CodeIgniter\V2\CodeIgniterSandboxedIntegration;
 use DDTrace\Integrations\Curl\CurlIntegration;
+use DDTrace\Integrations\Curl\CurlSandboxedIntegration;
 use DDTrace\Integrations\ElasticSearch\V1\ElasticSearchIntegration;
 use DDTrace\Integrations\ElasticSearch\V1\ElasticSearchSandboxedIntegration;
 use DDTrace\Integrations\Eloquent\EloquentIntegration;
 use DDTrace\Integrations\Eloquent\EloquentSandboxedIntegration;
 use DDTrace\Integrations\Guzzle\GuzzleIntegration;
+use DDTrace\Integrations\Guzzle\GuzzleSandboxedIntegration;
 use DDTrace\Integrations\Laravel\LaravelIntegration;
 use DDTrace\Integrations\Laravel\LaravelSandboxedIntegration;
 use DDTrace\Integrations\Lumen\LumenIntegration;
@@ -23,6 +25,7 @@ use DDTrace\Integrations\Mysqli\MysqliSandboxedIntegration;
 use DDTrace\Integrations\PDO\PDOIntegration;
 use DDTrace\Integrations\PDO\PDOSandboxedIntegration;
 use DDTrace\Integrations\Predis\PredisIntegration;
+use DDTrace\Integrations\Predis\PredisSandboxedIntegration;
 use DDTrace\Integrations\Slim\SlimIntegration;
 use DDTrace\Integrations\Symfony\SymfonyIntegration;
 use DDTrace\Integrations\Symfony\SymfonySandboxedIntegration;
@@ -87,10 +90,16 @@ class IntegrationsLoader
         if (Configuration::get()->isSandboxEnabled()) {
             $this->integrations[CodeIgniterSandboxedIntegration::NAME] =
                 '\DDTrace\Integrations\CodeIgniter\V2\CodeIgniterSandboxedIntegration';
+            if (\PHP_MAJOR_VERSION > 5) {
+                $this->integrations[CurlSandboxedIntegration::NAME] =
+                    '\DDTrace\Integrations\Curl\CurlSandboxedIntegration';
+            }
             $this->integrations[ElasticSearchSandboxedIntegration::NAME] =
                 '\DDTrace\Integrations\ElasticSearch\V1\ElasticSearchSandboxedIntegration';
             $this->integrations[EloquentSandboxedIntegration::NAME] =
                 '\DDTrace\Integrations\Eloquent\EloquentSandboxedIntegration';
+            $this->integrations[GuzzleSandboxedIntegration::NAME] =
+                '\DDTrace\Integrations\Guzzle\GuzzleSandboxedIntegration';
             $this->integrations[LaravelSandboxedIntegration::NAME] =
                 '\DDTrace\Integrations\Laravel\LaravelSandboxedIntegration';
             $this->integrations[MemcachedSandboxedIntegration::NAME] =
@@ -101,6 +110,8 @@ class IntegrationsLoader
                 '\DDTrace\Integrations\Mysqli\MysqliSandboxedIntegration';
             $this->integrations[PDOSandboxedIntegration::NAME] =
                 '\DDTrace\Integrations\PDO\PDOSandboxedIntegration';
+            $this->integrations[PredisSandboxedIntegration::NAME] =
+                '\DDTrace\Integrations\Predis\PredisSandboxedIntegration';
             if (\PHP_MAJOR_VERSION > 5) {
                 $this->integrations[SymfonySandboxedIntegration::NAME] =
                     '\DDTrace\Integrations\Symfony\SymfonySandboxedIntegration';
@@ -133,11 +144,6 @@ class IntegrationsLoader
      */
     public function loadAll()
     {
-        $globalConfig = Configuration::get();
-        if (!$globalConfig->isEnabled()) {
-            return;
-        }
-
         if (!extension_loaded('ddtrace')) {
             trigger_error(
                 'Missing ddtrace extension. To disable tracing set env variable DD_TRACE_ENABLED=false',
@@ -146,10 +152,14 @@ class IntegrationsLoader
             return;
         }
 
+        if (!\ddtrace_config_trace_enabled()) {
+            return;
+        }
+
         self::logDebug('Attempting integrations load');
 
         foreach ($this->integrations as $name => $class) {
-            if (!$globalConfig->isIntegrationEnabled($name)) {
+            if (!\ddtrace_config_integration_enabled($name)) {
                 self::logDebug('Integration {name} is disabled', ['name' => $name]);
                 continue;
             }

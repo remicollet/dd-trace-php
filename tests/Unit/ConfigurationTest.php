@@ -29,6 +29,7 @@ final class ConfigurationTest extends BaseTestCase
         putenv('DD_TRACE_ENABLED');
         putenv('DD_TRACE_SAMPLE_RATE');
         putenv('DD_TRACE_SAMPLING_RULES');
+        putenv('DD_SERVICE_MAPPING');
     }
 
     public function testTracerEnabledByDefault()
@@ -98,6 +99,7 @@ final class ConfigurationTest extends BaseTestCase
 
     public function testAppNameFallbackPriorities()
     {
+        // we do not support these fallbacks anymore; testing that we ignore them
         putenv('ddtrace_app_name');
         putenv('DD_TRACE_APP_NAME');
         $this->assertSame(
@@ -106,12 +108,12 @@ final class ConfigurationTest extends BaseTestCase
         );
 
         putenv('ddtrace_app_name=foo_app');
-        $this->assertSame('foo_app', Configuration::get()->appName());
+        $this->assertSame('fallback_name', Configuration::get()->appName('fallback_name'));
 
         Configuration::clear();
         putenv('ddtrace_app_name=foo_app');
         putenv('DD_TRACE_APP_NAME=bar_app');
-        $this->assertSame('bar_app', Configuration::get()->appName());
+        $this->assertSame('fallback_name', Configuration::get()->appName('fallback_name'));
     }
 
     public function testServiceName()
@@ -306,5 +308,56 @@ final class ConfigurationTest extends BaseTestCase
                 0.7,
             ],
         ];
+    }
+
+    /**
+     * @dataProvider dataProviderTestServiceMapping
+     * @param mixed $envs
+     * @param array $expected
+     */
+    public function testTraceServiceMapping($env, $expected)
+    {
+        if (false !== $env) {
+            putenv("DD_SERVICE_MAPPING=$env");
+        }
+
+        $this->assertSame($expected, Configuration::get()->getServiceMapping());
+    }
+
+    public function dataProviderTestServiceMapping()
+    {
+        return [
+            'not set' => [
+                false,
+                [],
+            ],
+            'empty' => [
+                false,
+                [],
+            ],
+            'one service mapping' => [
+                'service1:service2',
+                [ 'service1' => 'service2' ],
+            ],
+            'multiple service mappings' => [
+                'service1:service2,service3:service4',
+                [ 'service1' => 'service2', 'service3' => 'service4' ],
+            ],
+            'tolerant to extra whitespace' => [
+                'service1 :    service2 ,         service3 : service4                    ',
+                [ 'service1' => 'service2', 'service3' => 'service4' ],
+            ],
+        ];
+    }
+
+    public function testUriAsResourceNameEnabledDefault()
+    {
+        $this->assertTrue(Configuration::get()->isURLAsResourceNameEnabled());
+    }
+
+    public function testUriAsResourceNameCanBeDisabled()
+    {
+        putenv('DD_TRACE_URL_AS_RESOURCE_NAMES_ENABLED=false');
+        $this->assertFalse(Configuration::get()->isURLAsResourceNameEnabled());
     }
 }
