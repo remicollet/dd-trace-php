@@ -2,7 +2,6 @@
 
 namespace DDTrace\Integrations\Eloquent;
 
-use DDTrace\Configuration;
 use DDTrace\Integrations\Integration;
 use DDTrace\Integrations\SandboxedIntegration;
 use DDTrace\SpanData;
@@ -107,7 +106,6 @@ class EloquentSandboxedIntegration extends SandboxedIntegration
     {
         $span->type = Type::SQL;
         $span->service = $this->getAppName();
-        $span->meta[Tag::INTEGRATION_NAME] = $this->getName();
     }
 
     /**

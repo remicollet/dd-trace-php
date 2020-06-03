@@ -5,11 +5,13 @@ Spans are automatically flushed when auto-flushing enabled
 <?php if (PHP_VERSION_ID < 70000) die('skip: Auto flushing not supported on PHP 5'); ?>
 --ENV--
 DD_TRACE_AUTO_FLUSH_ENABLED=1
+DD_TRACE_TRACED_INTERNAL_FUNCTIONS=array_sum
 --FILE--
 <?php
 use DDTrace\SpanData;
 
 require 'fake_tracer.inc';
+require 'fake_global_tracer.inc';
 
 dd_trace_function('array_sum', function (SpanData $span, $args, $retval) {
     $span->name = 'array_sum';

@@ -2,7 +2,6 @@
 
 namespace DDTrace\Integrations\Yii\V2;
 
-use DDTrace\Configuration;
 use DDTrace\Contracts\Scope;
 use DDTrace\GlobalTracer;
 use DDTrace\Integrations\Yii\YiiSandboxedIntegration;
@@ -22,9 +21,7 @@ class YiiIntegrationLoader
             return Integration::NOT_LOADED;
         }
         $root = $scope->getSpan();
-        // Overwrite the default web integration
-        $root->setIntegration($integration);
-        $root->setTraceAnalyticsCandidate();
+        $integration->addTraceAnalyticsIfEnabledLegacy($root);
         $service = \ddtrace_config_app_name(YiiSandboxedIntegration::NAME);
 
         \dd_trace_method(

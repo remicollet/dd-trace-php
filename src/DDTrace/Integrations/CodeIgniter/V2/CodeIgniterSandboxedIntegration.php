@@ -2,7 +2,6 @@
 
 namespace DDTrace\Integrations\CodeIgniter\V2;
 
-use DDTrace\Configuration;
 use DDTrace\Contracts\Span;
 use DDTrace\GlobalTracer;
 use DDTrace\Http\Urls;
@@ -63,9 +62,7 @@ class CodeIgniterSandboxedIntegration extends SandboxedIntegration
 
     public function registerIntegration(\CI_Router $router, Span $root, $service)
     {
-        $root->setIntegration($this);
-        $root->setTraceAnalyticsCandidate();
-
+        $this->addTraceAnalyticsIfEnabledLegacy($root);
         $root->overwriteOperationName('codeigniter.request');
         $root->setTag(Tag::SERVICE_NAME, $service);
         $root->setTag(Tag::SPAN_TYPE, Type::WEB_SERVLET);

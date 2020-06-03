@@ -2,6 +2,7 @@
 
 namespace DDTrace\Integrations\Laravel;
 
+use DDTrace\Contracts\Span;
 use DDTrace\GlobalTracer;
 use DDTrace\SpanData;
 use DDTrace\Integrations\SandboxedIntegration;
@@ -60,8 +61,7 @@ class LaravelSandboxedIntegration extends SandboxedIntegration
             function (SpanData $span, $args, $response) use ($rootSpan, $integration) {
                 // Overwriting the default web integration
                 $rootSpan->overwriteOperationName('laravel.request');
-                $rootSpan->setIntegration($integration);
-                $rootSpan->setTraceAnalyticsCandidate();
+                $integration->addTraceAnalyticsIfEnabledLegacy($rootSpan);
                 if (\method_exists($response, 'getStatusCode')) {
                     $rootSpan->setTag(Tag::HTTP_STATUS_CODE, $response->getStatusCode());
                 }
@@ -85,8 +85,7 @@ class LaravelSandboxedIntegration extends SandboxedIntegration
                 list($request) = $args;
 
                 // Overwriting the default web integration
-                $rootSpan->setIntegration($integration);
-                $rootSpan->setTraceAnalyticsCandidate();
+                $integration->addTraceAnalyticsIfEnabledLegacy($rootSpan);
                 $rootSpan->setTag(
                     Tag::RESOURCE_NAME,
                     $route->getActionName() . ' ' . ($route->getName() ?: 'unnamed_route')
@@ -108,7 +107,6 @@ class LaravelSandboxedIntegration extends SandboxedIntegration
                 $span->type = Type::WEB_SERVLET;
                 $span->service = $integration->getServiceName();
                 $span->resource = $this->uri;
-                $integration->addIntegrationInfo($span);
             }
         );
 
@@ -126,7 +124,6 @@ class LaravelSandboxedIntegration extends SandboxedIntegration
             $span->type = Type::WEB_SERVLET;
             $span->service = $integration->getServiceName();
             $span->resource = $args[0];
-            $integration->addIntegrationInfo($span);
         });
 
         \dd_trace_method('Illuminate\View\View', 'render', function (SpanData $span) use ($integration) {
@@ -134,20 +131,20 @@ class LaravelSandboxedIntegration extends SandboxedIntegration
             $span->type = Type::WEB_SERVLET;
             $span->service = $integration->getServiceName();
             $span->resource = $this->view;
-            $integration->addIntegrationInfo($span);
         });
 
         \dd_trace_method(
             'Illuminate\View\Engines\CompilerEngine',
             'get',
-            function (SpanData $span, $args) use ($integration) {
-                $span->name = 'laravel.view';
+            function (SpanData $span, $args) use ($integration, $rootSpan) {
+                // This is used by both laravel and lumen. For consistency we rename it for lumen traces as otherwise
+                // users would see a span changing name as they upgrade to the new version.
+                $span->name = $integration->isLumen($rootSpan) ? 'lumen.view' : 'laravel.view';
                 $span->type = Type::WEB_SERVLET;
                 $span->service = $integration->getServiceName();
                 if (isset($args[0]) && \is_string($args[0])) {
                     $span->resource = $args[0];
                 }
-                $span->meta['integration.name'] = LaravelSandboxedIntegration::NAME;
             }
         );
 
@@ -160,7 +157,6 @@ class LaravelSandboxedIntegration extends SandboxedIntegration
                 $span->type = Type::WEB_SERVLET;
                 $span->service = $serviceName;
                 $span->resource = 'Illuminate\Foundation\ProviderRepository::load';
-                $rootSpan->setIntegration($integration);
                 $rootSpan->overwriteOperationName('laravel.request');
                 $rootSpan->setTag(Tag::SERVICE_NAME, $serviceName);
             }
@@ -170,7 +166,6 @@ class LaravelSandboxedIntegration extends SandboxedIntegration
             'Illuminate\Console\Application',
             '__construct',
             function () use ($rootSpan, $integration) {
-                $rootSpan->setIntegration($integration);
                 $rootSpan->overwriteOperationName('laravel.artisan');
                 $rootSpan->setTag(
                     Tag::RESOURCE_NAME,
@@ -202,5 +197,16 @@ class LaravelSandboxedIntegration extends SandboxedIntegration
             $this->serviceName = config('app.name');
         }
         return $this->serviceName ?: 'laravel';
+    }
+
+    /**
+     * Tells whether a span is a lumen request.
+     *
+     * @param Span $rootSpan
+     * @return bool
+     */
+    public function isLumen(Span $rootSpan)
+    {
+        return $rootSpan->getOperationName() === 'lumen.request';
     }
 }

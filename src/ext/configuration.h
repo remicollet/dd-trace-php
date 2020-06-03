@@ -4,6 +4,38 @@
 #include <stdbool.h>
 
 #include "compatibility.h"
+#include "ddtrace_string.h"
+#include "env_config.h"
+
+/**
+ * Returns true if `subject` matches "true" or "1".
+ * Returns false if `subject` matches "false" or "0".
+ * Returns `default_value` otherwise.
+ * @param subject An already lowercased string
+ * @param default_value
+ * @return
+ */
+bool ddtrace_config_bool(ddtrace_string subject, bool default_value);
+
+/**
+ * Fetch the environment variable represented by `env_name` from the SAPI env
+ * or regular environment and test if it is a boolean config value.
+ * @see ddtrace_config_bool
+ * @param env_name Name of the environment variable to fetch.
+ * @param default_value
+ * @return If the environment variable does not exist or is not bool-ish, return `default_value` instead.
+ */
+bool ddtrace_config_env_bool(ddtrace_string env_name, bool default_value TSRMLS_DC);
+
+bool ddtrace_config_distributed_tracing_enabled(TSRMLS_D);
+bool ddtrace_config_trace_enabled(TSRMLS_D);
+
+// note: only call this if ddtrace_config_trace_enabled() returns true
+bool ddtrace_config_integration_enabled(ddtrace_string integration TSRMLS_DC);
+
+inline ddtrace_string ddtrace_string_getenv(char *str, size_t len TSRMLS_DC) {
+    return ddtrace_string_cstring_ctor(ddtrace_getenv(str, len TSRMLS_CC));
+}
 
 struct ddtrace_memoized_configuration_t;
 extern struct ddtrace_memoized_configuration_t ddtrace_memoized_configuration;
@@ -57,6 +89,7 @@ void ddtrace_config_shutdown(void);
     INT(get_dd_trace_agent_timeout, "DD_TRACE_AGENT_TIMEOUT", DD_TRACE_AGENT_TIMEOUT)                                \
     INT(get_dd_trace_agent_connect_timeout, "DD_TRACE_AGENT_CONNECT_TIMEOUT", DD_TRACE_AGENT_CONNECT_TIMEOUT)        \
     INT(get_dd_trace_debug_prng_seed, "DD_TRACE_DEBUG_PRNG_SEED", -1)                                                \
+    BOOL(get_dd_trace_ignore_legacy_blacklist, "DD_TRACE_IGNORE_LEGACY_BLACKLIST", false)                            \
     BOOL(get_dd_log_backtrace, "DD_LOG_BACKTRACE", false)                                                            \
     BOOL(get_dd_trace_generate_root_span, "DD_TRACE_GENERATE_ROOT_SPAN", true)                                       \
     BOOL(get_dd_trace_sandbox_enabled, "DD_TRACE_SANDBOX_ENABLED", DD_TRACE_SANDBOX_ENABLED)                         \

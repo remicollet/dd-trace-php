@@ -5,11 +5,13 @@ Auto-flushing will not instrument while flushing
 <?php if (PHP_VERSION_ID < 70000) die('skip: Auto flushing not supported on PHP 5'); ?>
 --ENV--
 DD_TRACE_AUTO_FLUSH_ENABLED=1
+DD_TRACE_TRACED_INTERNAL_FUNCTIONS=array_sum
 --FILE--
 <?php
 use DDTrace\SpanData;
 
 require 'fake_tracer.inc';
+require 'fake_global_tracer.inc';
 
 // This is called from the flush() method of the fake tracer
 dd_trace_function('DDTrace\\fake_curl_exec', function (SpanData $span) {
