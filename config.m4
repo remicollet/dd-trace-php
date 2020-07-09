@@ -5,6 +5,15 @@ PHP_ARG_WITH(ddtrace-sanitize, whether to enable AddressSanitizer for ddtrace,
   [  --with-ddtrace-sanitize Build Datadog tracing with AddressSanitizer support], no, no)
 
 if test "$PHP_DDTRACE" != "no"; then
+  AC_CHECK_SIZEOF([long])
+  AC_MSG_CHECKING([for 64-bit platform])
+  AS_IF([test "$ac_cv_sizeof_long" -eq 4],[
+    AC_MSG_RESULT([no])
+    AC_MSG_ERROR([ddtrace only supports 64-bit platforms])
+  ],[
+    AC_MSG_RESULT([yes])
+  ])
+
   m4_include([m4/polyfill.m4])
   m4_include([m4/ax_execinfo.m4])
 
@@ -36,7 +45,6 @@ if test "$PHP_DDTRACE" != "no"; then
     src/ext/configuration_php_iface.c \
     src/ext/ddtrace_string.c \
     src/ext/dispatch.c \
-    src/ext/dispatch_setup.c \
     src/ext/dogstatsd_client.c \
     src/ext/engine_hooks.c \
     src/ext/env_config.c \
@@ -45,7 +53,6 @@ if test "$PHP_DDTRACE" != "no"; then
     src/ext/mpack/mpack.c \
     src/ext/random.c \
     src/ext/request_hooks.c \
-    src/ext/serializer.c \
     src/ext/signals.c \
     src/ext/span.c \
     src/ext/third-party/mt19937-64.c \
@@ -58,22 +65,31 @@ if test "$PHP_DDTRACE" != "no"; then
       src/ext/php5_4/auto_flush.c \
       src/ext/php5_4/blacklist.c \
       src/ext/php5_4/dispatch.c \
+      src/ext/php5_4/distributed_tracing.c \
       src/ext/php5_4/engine_hooks.c \
       src/ext/php5_4/handlers_internal.c \
+      src/ext/php5_4/serializer.c \
+      src/ext/php5/startup_logging.c \
     "
   elif test $PHP_VERSION -lt 70000; then
     DD_TRACE_PHP_VERSION_SPECIFIC_SOURCES="\
       src/ext/php5/auto_flush.c \
       src/ext/php5/blacklist.c \
       src/ext/php5/dispatch.c \
+      src/ext/php5/distributed_tracing.c \
+      src/ext/php5/engine_api.c \
       src/ext/php5/engine_hooks.c \
+      src/ext/php5/handlers_curl.c \
       src/ext/php5/handlers_internal.c \
+      src/ext/php5/serializer.c \
+      src/ext/php5/startup_logging.c \
     "
   elif test $PHP_VERSION -lt 80000; then
     DD_TRACE_PHP_VERSION_SPECIFIC_SOURCES="\
       src/ext/php7/auto_flush.c \
       src/ext/php7/blacklist.c \
       src/ext/php7/dispatch.c \
+      src/ext/php7/distributed_tracing.c \
       src/ext/php7/engine_api.c \
       src/ext/php7/engine_hooks.c \
       src/ext/php7/handlers_curl.c \
@@ -81,6 +97,8 @@ if test "$PHP_DDTRACE" != "no"; then
       src/ext/php7/handlers_memcached.c \
       src/ext/php7/handlers_mysqli.c \
       src/ext/php7/handlers_pdo.c \
+      src/ext/php7/serializer.c \
+      src/ext/php7/startup_logging.c \
     "
   else
     DD_TRACE_PHP_VERSION_SPECIFIC_SOURCES=""

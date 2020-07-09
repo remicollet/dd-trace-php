@@ -18,7 +18,7 @@ class CommonScenariosTest extends WebFrameworkTestCase
     protected static function getEnvs()
     {
         return array_merge(parent::getEnvs(), [
-            'DD_SERVICE_NAME' => 'lumen_test_app',
+            'DD_SERVICE' => 'lumen_test_app',
         ]);
     }
 
@@ -81,6 +81,14 @@ class CommonScenariosTest extends WebFrameworkTestCase
                 'http.method' => 'GET',
                 'http.url' => 'http://localhost:9999/simple',
                 'http.status_code' => '200',
+            ])->withChildren([
+                SpanAssertion::build(
+                    'Laravel\Lumen\Application.handleFoundRoute',
+                    'lumen_test_app',
+                    'web',
+                    'Laravel\Lumen\Application.handleFoundRoute'
+                )->withExactTags([])
+                ->skipIf(!static::IS_SANDBOX),
             ]),
         ];
     }
@@ -98,7 +106,18 @@ class CommonScenariosTest extends WebFrameworkTestCase
                 'http.method' => 'GET',
                 'http.url' => 'http://localhost:9999/error',
                 'http.status_code' => '500',
-            ])->setError(),
+            ])->setError()
+            ->withChildren([
+                SpanAssertion::build(
+                    'Laravel\Lumen\Application.handleFoundRoute',
+                    'lumen_test_app',
+                    '',
+                    'Laravel\Lumen\Application.handleFoundRoute'
+                )->withExistingTagsNames([
+                    'error.stack'
+                ])->setError('Exception', 'Controller error')
+                ->skipIf(!static::IS_SANDBOX),
+            ]),
         ];
     }
 }

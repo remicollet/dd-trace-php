@@ -21,15 +21,21 @@ final class ConfigurationTest extends BaseTestCase
     private function cleanUpEnvs()
     {
         putenv('DD_DISTRIBUTED_TRACING');
+        putenv('DD_ENV');
         putenv('DD_INTEGRATIONS_DISABLED');
         putenv('DD_PRIORITY_SAMPLING');
         putenv('DD_SAMPLING_RATE');
         putenv('DD_SERVICE_MAPPING');
+        putenv('DD_SERVICE_NAME');
+        putenv('DD_SERVICE');
+        putenv('DD_TAGS');
         putenv('DD_TRACE_ANALYTICS_ENABLED');
         putenv('DD_TRACE_DEBUG');
         putenv('DD_TRACE_ENABLED');
+        putenv('DD_TRACE_GLOBAL_TAGS');
         putenv('DD_TRACE_SAMPLE_RATE');
         putenv('DD_TRACE_SAMPLING_RULES');
+        putenv('DD_VERSION');
     }
 
     public function testTracerEnabledByDefault()
@@ -134,20 +140,34 @@ final class ConfigurationTest extends BaseTestCase
 
     public function testServiceName()
     {
-        $this->putEnvAndReloadConfig(['DD_SERVICE_NAME', 'DD_TRACE_APP_NAME', 'ddtrace_app_name']);
+        $this->putEnvAndReloadConfig(['DD_SERVICE', 'DD_TRACE_APP_NAME', 'ddtrace_app_name']);
 
         $this->assertSame('__default__', Configuration::get()->appName('__default__'));
         $this->assertSame('__default__', \ddtrace_config_app_name('__default__'));
 
+        $this->putEnvAndReloadConfig(['DD_SERVICE=my_app']);
+        $this->assertSame('my_app', Configuration::get()->appName('__default__'));
+        $this->assertSame('my_app', \ddtrace_config_app_name('__default__'));
+    }
+
+    public function testServiceNameViaDDServiceWinsOverDDServiceName()
+    {
+        $this->putEnvAndReloadConfig(['DD_SERVICE=my_app', 'DD_SERVICE_NAME=legacy']);
+        $this->assertSame('my_app', Configuration::get()->appName('__default__'));
+        $this->assertSame('my_app', \ddtrace_config_app_name('__default__'));
+    }
+
+    public function testServiceNameViaDDServiceNameForBackwardCompatibility()
+    {
         $this->putEnvAndReloadConfig(['DD_SERVICE_NAME=my_app']);
-        $this->assertSame('my_app', Configuration::get()->appName('my_app'));
-        $this->assertSame('my_app', \ddtrace_config_app_name('my_app'));
+        $this->assertSame('my_app', Configuration::get()->appName('__default__'));
+        $this->assertSame('my_app', \ddtrace_config_app_name('__default__'));
     }
 
     public function testServiceNameHasPrecedenceOverDeprecatedMethods()
     {
         $this->putEnvAndReloadConfig([
-            'DD_SERVICE_NAME=my_app',
+            'DD_SERVICE=my_app',
             'DD_TRACE_APP_NAME=wrong_app',
             'ddtrace_app_name=wrong_app',
         ]);
@@ -371,6 +391,34 @@ final class ConfigurationTest extends BaseTestCase
         ];
     }
 
+    public function testEnv()
+    {
+        $this->putEnvAndReloadConfig(['DD_ENV=my-env']);
+        $this->assertSame('my-env', Configuration::get()->getEnv());
+        $this->assertSame('my-env', \ddtrace_config_env());
+    }
+
+    public function testEnvNotSet()
+    {
+        $this->putEnvAndReloadConfig(['DD_ENV']);
+        $this->assertNull(Configuration::get()->getEnv());
+        $this->assertNull(\ddtrace_config_env());
+    }
+
+    public function testVersion()
+    {
+        $this->putEnvAndReloadConfig(['DD_VERSION=1.2.3']);
+        $this->assertSame('1.2.3', Configuration::get()->getServiceVersion());
+        $this->assertSame('1.2.3', \ddtrace_config_service_version());
+    }
+
+    public function testVersionNotSet()
+    {
+        $this->putEnvAndReloadConfig(['DD_VERSION']);
+        $this->assertNull(Configuration::get()->getServiceVersion());
+        $this->assertNull(\ddtrace_config_service_version());
+    }
+
     public function testUriAsResourceNameEnabledDefault()
     {
         $this->assertTrue(Configuration::get()->isURLAsResourceNameEnabled());
@@ -382,5 +430,62 @@ final class ConfigurationTest extends BaseTestCase
         $this->putEnvAndReloadConfig(['DD_TRACE_URL_AS_RESOURCE_NAMES_ENABLED=false']);
         $this->assertFalse(Configuration::get()->isURLAsResourceNameEnabled());
         $this->assertFalse(\ddtrace_config_url_resource_name_enabled());
+    }
+
+    public function testGlobalTags()
+    {
+        $this->putEnvAndReloadConfig(['DD_TAGS=key1:value1,key2:value2']);
+        $this->assertEquals(['key1' => 'value1', 'key2' => 'value2'], Configuration::get()->getGlobalTags());
+        $this->assertEquals(['key1' => 'value1', 'key2' => 'value2'], \ddtrace_config_global_tags());
+    }
+
+    public function testGlobalTagsLegacyEnv()
+    {
+        $this->putEnvAndReloadConfig(['DD_TRACE_GLOBAL_TAGS=key1:value1,key2:value2']);
+        $this->assertEquals(['key1' => 'value1', 'key2' => 'value2'], Configuration::get()->getGlobalTags());
+        $this->assertEquals(['key1' => 'value1', 'key2' => 'value2'], \ddtrace_config_global_tags());
+    }
+
+    public function testGlobalTagsNewEnvWinsOverLegacyEnv()
+    {
+        $this->putEnvAndReloadConfig([
+            'DD_TRACE_GLOBAL_TAGS=key10:value10,key20:value20',
+            'DD_TAGS=key1:value1,key2:value2',
+        ]);
+        $this->assertEquals(['key1' => 'value1', 'key2' => 'value2'], Configuration::get()->getGlobalTags());
+        $this->assertEquals(['key1' => 'value1', 'key2' => 'value2'], \ddtrace_config_global_tags());
+    }
+
+    public function testGlobalTagsWrongValueJustResultsInNoTags()
+    {
+        $this->putEnvAndReloadConfig(['DD_TAGS=wrong_key_value']);
+        $this->assertEquals([], Configuration::get()->getGlobalTags());
+        $this->assertEquals([], \ddtrace_config_global_tags());
+    }
+
+    public function testUriNormalizationSettingWhenNotSet()
+    {
+        $this->putEnvAndReloadConfig([
+            'DD_TRACE_RESOURCE_URI_FRAGMENT_REGEX',
+            'DD_TRACE_RESOURCE_URI_MAPPING_INCOMING',
+            'DD_TRACE_RESOURCE_URI_MAPPING_OUTGOING',
+        ]);
+
+        $this->assertSame([], \ddtrace_config_path_fragment_regex());
+        $this->assertSame([], \ddtrace_config_path_mapping_incoming());
+        $this->assertSame([], \ddtrace_config_path_mapping_outgoing());
+    }
+
+    public function testUriNormalizationSettingWheSet()
+    {
+        $this->putEnvAndReloadConfig([
+            'DD_TRACE_RESOURCE_URI_FRAGMENT_REGEX=/a/',
+            'DD_TRACE_RESOURCE_URI_MAPPING_INCOMING=path/*',
+            'DD_TRACE_RESOURCE_URI_MAPPING_OUTGOING=path/*',
+        ]);
+
+        $this->assertSame(['/a/'], \ddtrace_config_path_fragment_regex());
+        $this->assertSame(['path/*'], \ddtrace_config_path_mapping_incoming());
+        $this->assertSame(['path/*'], \ddtrace_config_path_mapping_outgoing());
     }
 }

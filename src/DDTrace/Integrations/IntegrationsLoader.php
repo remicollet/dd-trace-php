@@ -94,10 +94,8 @@ class IntegrationsLoader
                 '\DDTrace\Integrations\CakePHP\CakePHPSandboxedIntegration';
             $this->integrations[CodeIgniterSandboxedIntegration::NAME] =
                 '\DDTrace\Integrations\CodeIgniter\V2\CodeIgniterSandboxedIntegration';
-            if (\PHP_MAJOR_VERSION > 5) {
-                $this->integrations[CurlSandboxedIntegration::NAME] =
-                    '\DDTrace\Integrations\Curl\CurlSandboxedIntegration';
-            }
+            $this->integrations[CurlSandboxedIntegration::NAME] =
+                '\DDTrace\Integrations\Curl\CurlSandboxedIntegration';
             $this->integrations[ElasticSearchSandboxedIntegration::NAME] =
                 '\DDTrace\Integrations\ElasticSearch\V1\ElasticSearchSandboxedIntegration';
             $this->integrations[EloquentSandboxedIntegration::NAME] =
@@ -106,10 +104,8 @@ class IntegrationsLoader
                 '\DDTrace\Integrations\Guzzle\GuzzleSandboxedIntegration';
             $this->integrations[LaravelSandboxedIntegration::NAME] =
                 '\DDTrace\Integrations\Laravel\LaravelSandboxedIntegration';
-            if (\PHP_MAJOR_VERSION > 5) {
-                $this->integrations[LumenSandboxedIntegration::NAME] =
-                    '\DDTrace\Integrations\Lumen\LumenSandboxedIntegration';
-            }
+            $this->integrations[LumenSandboxedIntegration::NAME] =
+                '\DDTrace\Integrations\Lumen\LumenSandboxedIntegration';
             $this->integrations[MemcachedSandboxedIntegration::NAME] =
                 '\DDTrace\Integrations\Memcached\MemcachedSandboxedIntegration';
             $this->integrations[MongoSandboxedIntegration::NAME] =
@@ -122,10 +118,8 @@ class IntegrationsLoader
                 '\DDTrace\Integrations\Predis\PredisSandboxedIntegration';
             $this->integrations[SlimSandboxedIntegration::NAME] =
                 '\DDTrace\Integrations\Slim\SlimSandboxedIntegration';
-            if (\PHP_MAJOR_VERSION > 5) {
-                $this->integrations[SymfonySandboxedIntegration::NAME] =
-                    '\DDTrace\Integrations\Symfony\SymfonySandboxedIntegration';
-            }
+            $this->integrations[SymfonySandboxedIntegration::NAME] =
+                '\DDTrace\Integrations\Symfony\SymfonySandboxedIntegration';
             $this->integrations[WordPressSandboxedIntegration::NAME] =
                 '\DDTrace\Integrations\WordPress\WordPressSandboxedIntegration';
             $this->integrations[YiiSandboxedIntegration::NAME] =

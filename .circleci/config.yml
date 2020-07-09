@@ -197,6 +197,16 @@ executors:
     docker:
       - image: << parameters.docker_image >>
       - <<: *IMAGE_DOCKER_DD_AGENT
+  with_httpbin:
+    environment:
+      DDAGENT_HOSTNAME: 127.0.0.1
+    parameters:
+      docker_image:
+        type: string
+    docker:
+      - image: << parameters.docker_image >>
+      - <<: *IMAGE_DOCKER_DD_AGENT
+      - <<: *IMAGE_DOCKER_HTTPBIN
   with_integrations:
     environment:
       DDAGENT_HOSTNAME: 127.0.0.1
@@ -239,7 +249,7 @@ jobs:
           command: mkdir -p test-results/phpcs
       - run:
           name: Running eclint
-          command: node_modules/.bin/eclint check '**/*' '!tests/ext/sandbox/*' '!tests/ext/sandbox-prehook/*' '!config.*' '!m4/*' '!tmp/**/*' '!vendor/**/*' '!src/ext/.libs/*' '!src/dogstatsd/**' '!LICENSE' '!phpstan.*.neon' '!tests/overhead/**' '!tests/Frameworks/*/Version_*/**' '!tests/dockerfiles/**' '!dockerfiles/**/*.patch' '!tests/AutoInstrumentation/**' '!.composer/**/*' '!src/ext/mpack/**' '!src/ext/third-party/**' '!LICENSE.*' || touch .failure
+          command: node_modules/.bin/eclint check '**/*' '!dockerfiles/testing-environment/**/*' '!tests/ext/sandbox/*' '!tests/ext/sandbox-prehook/*' '!config.*' '!m4/*' '!tmp/**/*' '!vendor/**/*' '!src/ext/.libs/*' '!src/dogstatsd/**' '!LICENSE' '!phpstan.*.neon' '!tests/overhead/**' '!tests/Frameworks/*/Version_*/**' '!tests/dockerfiles/**' '!dockerfiles/**/*.patch' '!tests/AutoInstrumentation/**' '!.composer/**/*' '!src/ext/mpack/**' '!src/ext/third-party/**' '!LICENSE.*' || touch .failure
       - run:
           name: Running phpcs
           command: composer lint -- --report=junit | tee test-results/phpcs/results.xml || touch .failure
@@ -367,8 +377,9 @@ jobs:
     environment:
       DDAGENT_HOSTNAME: 127.0.0.1
       DD_AGENT_HOST: 127.0.0.1
+      HTTPBIN_HOSTNAME: httpbin_integration
     executor:
-      name: with_agent
+      name: with_httpbin
       docker_image: << parameters.docker_image >>
     steps:
       - <<: *STEP_ATTACH_WORKSPACE
@@ -428,6 +439,8 @@ jobs:
             fi
             cd /usr/local/src/php
             export DD_TRACE_CLI_ENABLED=true
+            export DD_TRACE_STARTUP_LOGS=0
+            export DD_TRACE_WARN_LEGACY_DD_TRACE=0
             export REPORT_EXIT_STATUS=1
             export TEST_PHP_JUNIT=/tmp/artifacts/tests/php-tests.xml
             mkdir -p /tmp/artifacts/tests

@@ -60,6 +60,10 @@ if (!dd_tracing_enabled()) {
 
 // Required classes and functions
 require __DIR__ . '/autoload.php';
+if (\PHP_MAJOR_VERSION === 5) {
+    require __DIR__ . '/php5.php';
+}
+
 // Optional classes and functions
 require __DIR__ . '/dd_register_optional_deps_autoloader.php';
 

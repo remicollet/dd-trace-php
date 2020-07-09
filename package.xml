@@ -51,6 +51,7 @@
                     <file name="ddtrace_string.c" role="src" />
                     <file name="ddtrace_string.h" role="src" />
                     <file name="debug.h" role="src" />
+                    <file name="distributed_tracing.h" role="src" />
                     <file name="memory_limit.c" role="src" />
                     <file name="memory_limit.h" role="src" />
                     <file name="circuit_breaker.c" role="src" />
@@ -58,7 +59,6 @@
                     <file name="vendor_stdatomic.h" role="src" />
                     <file name="dispatch.c" role="src" />
                     <file name="dispatch.h" role="src" />
-                    <file name="dispatch_setup.c" role="src" />
                     <file name="dogstatsd_client.c" role="src" />
                     <file name="dogstatsd_client.h" role="src" />
                     <file name="engine_hooks.c" role="src" />
@@ -71,12 +71,12 @@
                     <file name="random.h" role="src" />
                     <file name="request_hooks.c" role="src" />
                     <file name="request_hooks.h" role="src" />
-                    <file name="serializer.c" role="src" />
                     <file name="serializer.h" role="src" />
                     <file name="signals.c" role="src" />
                     <file name="signals.h" role="src" />
                     <file name="span.c" role="src" />
                     <file name="span.h" role="src" />
+                    <file name="startup_logging.h" role="src" />
                     <file name="version.h" role="src" />
                     <file name="compatibility.h" role="src" />
                     <dir name="mpack">
@@ -91,20 +91,26 @@
                         <file name="auto_flush.c" role="src" />
                         <file name="blacklist.c" role="src" />
                         <file name="dispatch.c" role="src" />
+                        <file name="distributed_tracing.c" role="src" />
                         <file name="engine_hooks.c" role="src" />
-                        <file name="handlers_curl.c" role="src" />
+                        <file name="handlers_internal.c" role="src" />
+                        <file name="serializer.c" role="src" />
                     </dir>
                     <dir name="php5">
                         <file name="auto_flush.c" role="src" />
                         <file name="blacklist.c" role="src" />
                         <file name="dispatch.c" role="src" />
+                        <file name="distributed_tracing.c" role="src" />
                         <file name="engine_hooks.c" role="src" />
                         <file name="handlers_internal.c" role="src" />
+                        <file name="serializer.c" role="src" />
+                        <file name="startup_logging.c" role="src" />
                     </dir>
                     <dir name="php7">
                         <file name="auto_flush.c" role="src" />
                         <file name="blacklist.c" role="src" />
                         <file name="dispatch.c" role="src" />
+                        <file name="distributed_tracing.c" role="src" />
                         <file name="engine_api.c" role="src" />
                         <file name="engine_api.h" role="src" />
                         <file name="engine_hooks.c" role="src" />
@@ -113,6 +119,8 @@
                         <file name="handlers_memcached.c" role="src" />
                         <file name="handlers_mysqli.c" role="src" />
                         <file name="handlers_pdo.c" role="src" />
+                        <file name="serializer.c" role="src" />
+                        <file name="startup_logging.c" role="src" />
                     </dir>
                     <dir name="third-party">
                         <file name="mt19937-64.c" role="src" />
@@ -199,16 +207,29 @@
                         <file name="auto_flush_userland_root_span.phpt" role="test" />
                         <file name="close-on-exit.phpt" role="test" />
                         <file name="close-on-exit-retval.phpt" role="test" />
+                        <file name="dd_dumper.inc" role="test" />
                         <file name="dd_trace_closed_spans_count.phpt" role="test" />
                         <file name="dd_trace_api_error.phpt" role="test" />
+                        <file name="dd_trace_function_alias.phpt" role="test" />
                         <file name="dd_trace_function_complex.phpt" role="test" />
                         <file name="dd_trace_function_internal.phpt" role="test" />
                         <file name="dd_trace_function_userland.phpt" role="test" />
                         <file name="dd_trace_method.phpt" role="test" />
+                        <file name="dd_trace_method_alias.phpt" role="test" />
                         <file name="dd_trace_method_binds_called_object.phpt" role="test" />
                         <file name="dd_trace_method_works_with_dd_trace.phpt" role="test" />
                         <file name="dd_trace_push_span_id.phpt" role="test" />
                         <file name="dd_trace_set_trace_id.phpt" role="test" />
+                        <file name="default_span_properties.phpt" role="test" />
+                        <file name="default_span_properties_method.phpt" role="test" />
+                        <file name="distributed_tracing.inc" role="test" />
+                        <file name="distributed_tracing_curl.phpt" role="test" />
+                        <file name="distributed_tracing_curl_copy_handle.phpt" role="test" />
+                        <file name="distributed_tracing_curl_existing_headers_001.phpt" role="test" />
+                        <file name="distributed_tracing_curl_existing_headers_002.phpt" role="test" />
+                        <file name="distributed_tracing_curl_inject.inc" role="test" />
+                        <file name="distributed_tracing_curl_inject_exception.inc" role="test" />
+                        <file name="distributed_tracing_curl_sandboxed.phpt" role="test" />
                         <file name="drop_spans.phpt" role="test" />
                         <file name="errors_are_flagged_from_userland.phpt" role="test" />
                         <file name="exception_does_not_close_span_that_catches.phpt" role="test" />
@@ -245,6 +266,7 @@
                         <file name="keep_spans_in_limited_tracing_userland_methods.phpt" role="test" />
                         <file name="memory_limit_graceful_bailout.phpt" role="test" />
                         <file name="new_static.phpt" role="test" />
+                        <file name="non-zero_duration.phpt" role="test" />
                         <file name="return_by_ref.phpt" role="test" />
                         <file name="retval_is_null_with_exception.phpt" role="test" />
                         <file name="safe_to_string_metadata.phpt" role="test" />
@@ -319,6 +341,7 @@
                         <file name="with_params_function_hook.phpt" role="test" />
                         <file name="with_params_method_hook.phpt" role="test" />
                     </dir>
+                    <file name="dd_trace_warning.phpt" role="test" />
                     <file name="destructor_called_when_this_gets_out_of_scope.phpt" role="test" />
                     <file name="enable_throw_exception_if_overridable_doesnt_exist.phpt" role="test" />
                     <file name="from_php_7_3_test_user_streams_consumed_bug.phpt" role="test" />
@@ -360,6 +383,14 @@
                     <file name="keep_spans_in_limited_tracing_userland_methods.phpt" role="test" />
                     <file name="simple_function_hook.phpt" role="test" />
                     <file name="simple_method_hook.phpt" role="test" />
+                    <file name="startup_logging.inc" role="test" />
+                    <file name="startup_logging.phpt" role="test" />
+                    <file name="startup_logging_config.phpt" role="test" />
+                    <file name="startup_logging_diagnostics.phpt" role="test" />
+                    <file name="startup_logging_disabled.phpt" role="test" />
+                    <file name="startup_logging_json.phpt" role="test" />
+                    <file name="startup_logging_json_config.phpt" role="test" />
+                    <file name="startup_logging_skipif.inc" role="test" />
                     <file name="throw_exception.phpt" role="test" />
                     <file name="trace_method_or_function_that_will_exist_later.phpt" role="test" />
                     <file name="trace_static_method.phpt" role="test" />
