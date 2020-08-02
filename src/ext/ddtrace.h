@@ -41,7 +41,6 @@ zend_bool disable;
 zend_bool disable_in_current_request;
 char *request_init_hook;
 zend_bool request_init_hook_loaded;
-zend_bool strict_mode;
 
 uint32_t traces_group_id;
 HashTable *class_lookup;
@@ -105,6 +104,7 @@ ZEND_END_MODULE_GLOBALS(ddtrace)
 
 #define DDTRACE_FE(name, arg_info) DDTRACE_FENTRY(name, ZEND_FN(name), arg_info, 0)
 #define DDTRACE_NS_FE(name, arg_info) DDTRACE_RAW_FENTRY("DDTrace\\" #name, ZEND_FN(name), arg_info, 0)
+#define DDTRACE_SUB_NS_FE(ns, name, arg_info) DDTRACE_RAW_FENTRY("DDTrace\\" ns #name, ZEND_FN(name), arg_info, 0)
 #define DDTRACE_FALIAS(name, alias, arg_info) DDTRACE_FENTRY(name, ZEND_FN(alias), arg_info, 0)
 #define DDTRACE_FE_END ZEND_FE_END
 
