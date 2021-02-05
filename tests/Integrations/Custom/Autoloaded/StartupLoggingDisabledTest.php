@@ -7,8 +7,6 @@ use DDTrace\Tests\Frameworks\Util\Request\GetSpec;
 
 final class StartupLoggingDisabledTest extends WebFrameworkTestCase
 {
-    const IS_SANDBOX = true;
-
     protected static function getAppIndexScript()
     {
         return __DIR__ . '/../../../Frameworks/Custom/Version_Autoloaded/public/index.php';
@@ -22,14 +20,14 @@ final class StartupLoggingDisabledTest extends WebFrameworkTestCase
     protected static function getEnvs()
     {
         return array_merge(parent::getEnvs(), [
-            'DD_TRACE_DEBUG' => true,
+            'DD_TRACE_DEBUG' => true, // Startup logs only show in debug mode
             'DD_TRACE_STARTUP_LOGS' => false,
         ]);
     }
 
-    protected function setUp()
+    protected function ddSetUp()
     {
-        parent::setUp();
+        parent::ddSetUp();
 
         // clear out any previous logs
         $log = self::getAppErrorLog();
@@ -53,6 +51,6 @@ final class StartupLoggingDisabledTest extends WebFrameworkTestCase
 
         $contents = \file_get_contents(self::getAppErrorLog());
 
-        self::assertNotContains('DATADOG TRACER CONFIGURATION', $contents);
+        self::assertStringNotContains('DATADOG TRACER CONFIGURATION', $contents);
     }
 }

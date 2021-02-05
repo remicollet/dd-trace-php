@@ -3,7 +3,7 @@
 --DESCRIPTION--
 This differs from the original dd_trace() test in that it does not modify the original call arguments
 --SKIPIF--
-<?php if (PHP_VERSION_ID < 50500) die('skip PHP 5.4 not supported'); ?>
+<?php if (PHP_VERSION_ID >= 80000) die('skip: Dispatch cannot be overwritten on PHP 8+'); ?>
 --FILE--
 <?php
 class Test {

@@ -9,7 +9,6 @@ use DDTrace\Tests\Frameworks\Util\Request\GetSpec;
 final class CircuitBreakerTest extends WebFrameworkTestCase
 {
     const FLUSH_INTERVAL_MS = 500;
-    const IS_SANDBOX = true;
 
     protected static function getAppIndexScript()
     {
@@ -27,9 +26,9 @@ final class CircuitBreakerTest extends WebFrameworkTestCase
         ]);
     }
 
-    protected function tearDown()
+    protected function ddTearDown()
     {
-        parent::tearDown();
+        parent::ddTearDown();
         \dd_tracer_circuit_breaker_register_success();
     }
 

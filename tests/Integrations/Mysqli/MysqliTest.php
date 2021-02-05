@@ -8,23 +8,21 @@ use DDTrace\Tests\Common\SpanAssertion;
 
 class MysqliTest extends IntegrationTestCase
 {
-    const IS_SANDBOX = false;
-
     private static $host = 'mysql_integration';
     private static $db = 'test';
     private static $port = '3306';
     private static $user = 'test';
     private static $password = 'test';
 
-    public static function setUpBeforeClass()
+    public static function ddSetUpBeforeClass()
     {
-        parent::setUpBeforeClass();
+        parent::ddSetUpBeforeClass();
         IntegrationsLoader::load();
     }
 
-    protected function setUp()
+    protected function ddSetUp()
     {
-        parent::setUp();
+        parent::ddSetUp();
         $this->clearDatabase();
         $this->setUpDatabase();
     }

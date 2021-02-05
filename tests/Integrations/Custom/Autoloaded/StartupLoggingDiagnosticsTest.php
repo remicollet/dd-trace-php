@@ -7,8 +7,6 @@ use DDTrace\Tests\Frameworks\Util\Request\GetSpec;
 
 final class StartupLoggingDiagnosticsTest extends WebFrameworkTestCase
 {
-    const IS_SANDBOX = true;
-
     protected static function getAppIndexScript()
     {
         return __DIR__ . '/../../../Frameworks/Custom/Version_Autoloaded/public/index.php';
@@ -22,14 +20,14 @@ final class StartupLoggingDiagnosticsTest extends WebFrameworkTestCase
     protected static function getEnvs()
     {
         return array_merge(parent::getEnvs(), [
-            'DD_TRACE_DEBUG' => true, // Emits diagnostic messages
+            'DD_TRACE_DEBUG' => true, // Startup logs only show in debug mode
             'DD_AGENT_HOST' => 'invalid_host', // Will fail diagnostic check
         ]);
     }
 
-    protected function setUp()
+    protected function ddSetUp()
     {
-        parent::setUp();
+        parent::ddSetUp();
 
         // clear out any previous logs
         $log = self::getAppErrorLog();
@@ -54,7 +52,7 @@ final class StartupLoggingDiagnosticsTest extends WebFrameworkTestCase
 
         $contents = \file_get_contents(self::getAppErrorLog());
 
-        self::assertContains('DATADOG TRACER DIAGNOSTICS - agent_error:', $contents);
-        self::assertContains('DATADOG TRACER DIAGNOSTICS - ddtrace.request_init_hook_reachable:', $contents);
+        self::assertStringContains('DATADOG TRACER DIAGNOSTICS - agent_error:', $contents);
+        self::assertStringContains('DATADOG TRACER DIAGNOSTICS - ddtrace.request_init_hook_reachable:', $contents);
     }
 }

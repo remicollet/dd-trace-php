@@ -8,16 +8,14 @@ use DDTrace\Tests\Frameworks\Util\Request\RequestSpec;
 
 final class CommonScenariosTest extends WebFrameworkTestCase
 {
-    const IS_SANDBOX = true;
-
     protected static function getAppIndexScript()
     {
         return __DIR__ . '/../../../Frameworks/WordPress/Version_4_8/index.php';
     }
 
-    public static function setUpBeforeClass()
+    public static function ddSetUpBeforeClass()
     {
-        parent::setUpBeforeClass();
+        parent::ddSetUpBeforeClass();
         $pdo = new \PDO('mysql:host=mysql_integration;dbname=test', 'test', 'test');
         $pdo->exec(file_get_contents(__DIR__ . '/../../../Frameworks/WordPress/Version_4_8/wp_2019-10-01.sql'));
     }
@@ -74,9 +72,6 @@ final class CommonScenariosTest extends WebFrameworkTestCase
             SpanAssertion::exists('mysqli_query'),
             SpanAssertion::exists('mysqli_query'),
             SpanAssertion::exists('mysqli_real_connect'),
-        ];
-
-        $exit_children = [
             SpanAssertion::exists('WP.main')->withChildren([
                 SpanAssertion::exists('WP.init'),
                 SpanAssertion::exists('WP.parse_request')->withChildren([
@@ -92,9 +87,6 @@ final class CommonScenariosTest extends WebFrameworkTestCase
                 ]),
             ]),
         ];
-
-        // In PHP 5, we don't yet support auto-closing sandbox spans with exit()
-        $children = \array_merge($children, \PHP_MAJOR_VERSION > 5 ? $exit_children : []);
 
         return $this->buildDataProvider(
             [
@@ -225,7 +217,15 @@ final class CommonScenariosTest extends WebFrameworkTestCase
                         'http.url' => 'http://localhost:9999/error',
                         // WordPress doesn't appear to automatically set the proper error code
                         'http.status_code' => '200',
-                    ])->withChildren([
+                    ])->ifPhpVersionNotMatch('5.4', function (SpanAssertion $assertion) {
+                        // Automatic error attachment to root span in case of PHP 5.4 is still under development.
+                        $message = PHP_MAJOR_VERSION >= 7
+                            ? "Uncaught Exception: Oops! in %s:%d"
+                            : "Uncaught exception 'Exception' with message 'Oops!' in %s:%d";
+                        $assertion
+                            ->setError("E_ERROR", $message)
+                            ->withExistingTagsNames(['error.stack']);
+                    })->withChildren([
                         SpanAssertion::exists('WP.main')
                             // There's no way to propagate this to the root span in userland yet
                             ->setError('Exception', 'Oops!')

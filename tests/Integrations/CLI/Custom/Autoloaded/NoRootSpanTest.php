@@ -3,13 +3,13 @@
 namespace DDTrace\Tests\Integrations\CLI\Custom\Autoloaded;
 
 use DDTrace\Tests\Common\SpanAssertion;
-use DDTrace\Tests\Integrations\CLI\CLITestCase;
+use DDTrace\Tests\Common\CLITestCase;
 
 final class NoRootSpanTest extends CLITestCase
 {
-    protected function setUp()
+    protected function ddSetUp()
     {
-        parent::setUp();
+        parent::ddSetUp();
         if (PHP_MAJOR_VERSION === 5) {
             $this->markTestSkipped('Auto flushing not supported on PHP 5');
         }

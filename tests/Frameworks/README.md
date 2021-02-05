@@ -42,6 +42,12 @@ Link: https://laravel.com/docs/5.7/installation
 
     $ composer create-project --prefer-dist laravel/laravel Version_5_7 5.7.*
 
+### Laravel 8.x
+
+Link: https://laravel.com/docs/8.x#via-composer-create-project
+
+    $ composer create-project --prefer-dist laravel/laravel Version_8 ^8.0
+
 ## Lumen
 
 In order to generate the sample Lumen apps we used the default commands from the framework's 'Getting started' guides.
@@ -75,6 +81,10 @@ In order to generate the sample Slim Framework apps we used the default commands
 ### Slim 3.12
 
     $ composer create-project slim/slim-skeleton Version_3_12 "3.12.*"
+
+### Slim 4.x
+
+    $ composer create-project slim/slim-skeleton Version_4 "4.*"
 
 ## Symfony
 
@@ -127,6 +137,18 @@ Link: https://symfony.com/doc/4.2/setup.html
 Link: https://symfony.com/doc/4.4/setup.html
 
     $ composer create-project symfony/website-skeleton Version_4_4 "4.4.*"
+
+### Symfony 5.0
+
+Link: https://symfony.com/doc/5.0/setup.html
+
+    $ composer create-project symfony/website-skeleton Version_5_0 "5.0.*"
+
+### Symfony 5.1
+
+Link: https://symfony.com/doc/5.1/setup.html
+
+    $ composer create-project symfony/website-skeleton Version_5_1 "5.1.*"
 
 ## Custom frameworks
 

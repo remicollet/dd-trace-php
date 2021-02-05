@@ -11,8 +11,8 @@ class Constants
     {
         return [
             '/^\d+$/',
-            '/^[0-9a-f]{8}-?[0-9a-f]{4}-?[1-5][0-9a-f]{3}-?[89ab][0-9a-f]{3}-?[0-9a-f]{12}$/',
-            '/^[0-9a-f]{8,128}$/',
+            '/^[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[1-5][0-9a-fA-F]{3}-?[89abAB][0-9a-fA-F]{3}-?[0-9a-fA-F]{12}$/',
+            '/^[0-9a-fA-F]{8,128}$/',
         ];
     }
 }
@@ -122,4 +122,24 @@ function _util_uri_apply_rules($uriPath, $incoming)
     }
 
     return implode('/', $fragments);
+}
+
+/**
+ * Transform a host name (optionally with schema) or unix domain socket path into a service name-friendly string.
+ *
+ * @param string $hostOrUDS
+ * @return string
+ */
+function util_normalize_host_uds_as_service($hostOrUDS)
+{
+    if (null === $hostOrUDS) {
+        return '';
+    }
+
+    // Note, we do not use PHP's `parse_url()` because it would require tricks to be compatible with UDS file names.
+    $parts = \explode("://", $hostOrUDS);
+    $noSchema = count($parts) > 1 ? $parts[count($parts) - 1] : $hostOrUDS;
+    $noSpaces = \str_replace(' ', '', $noSchema);
+
+    return \trim(preg_replace('/[^a-zA-Z0-9.\_]+/', '-', $noSpaces), '- ');
 }

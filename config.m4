@@ -28,85 +28,164 @@ if test "$PHP_DDTRACE" != "no"; then
   )
 
   if test "$PHP_DDTRACE_SANITIZE" != "no"; then
-    PHP_ADD_LIBRARY(asan, , EXTRA_LDFLAGS)
+    EXTRA_LDFLAGS="-fsanitize=address"
     EXTRA_CFLAGS="-fsanitize=address -fno-omit-frame-pointer"
     PHP_SUBST(EXTRA_CFLAGS)
+    PHP_SUBST(EXTRA_LDFLAGS)
   fi
 
-  dnl ddtrace.c comes first, then everything else alphabetically
-  DD_TRACE_PHP_SOURCES="src/ext/ddtrace.c \
+  DD_TRACE_VENDOR_SOURCES="\
+    ext/vendor/mpack/mpack.c \
+    ext/vendor/mt19937/mt19937-64.c \
     src/dogstatsd/client.c \
-    src/ext/arrays.c \
-    src/ext/circuit_breaker.c \
-    src/ext/comms_php.c \
-    src/ext/compat_string.c \
-    src/ext/coms.c \
-    src/ext/configuration.c \
-    src/ext/configuration_php_iface.c \
-    src/ext/ddtrace_string.c \
-    src/ext/dispatch.c \
-    src/ext/dogstatsd_client.c \
-    src/ext/engine_hooks.c \
-    src/ext/env_config.c \
-    src/ext/logging.c \
-    src/ext/memory_limit.c \
-    src/ext/mpack/mpack.c \
-    src/ext/random.c \
-    src/ext/request_hooks.c \
-    src/ext/signals.c \
-    src/ext/span.c \
-    src/ext/third-party/mt19937-64.c \
-    src/ext/integrations/integrations.c \
   "
 
-  PHP_VERSION=$($PHP_CONFIG --vernum)
+  PHP_VERSION_ID=$($PHP_CONFIG --vernum)
 
-  if test $PHP_VERSION -lt 50500; then
-    DD_TRACE_PHP_VERSION_SPECIFIC_SOURCES="\
-      src/ext/php5_4/auto_flush.c \
-      src/ext/php5_4/blacklist.c \
-      src/ext/php5_4/dispatch.c \
-      src/ext/php5_4/distributed_tracing.c \
-      src/ext/php5_4/engine_hooks.c \
-      src/ext/php5_4/handlers_internal.c \
-      src/ext/php5_4/serializer.c \
-      src/ext/php5/startup_logging.c \
+  if test $PHP_VERSION_ID -lt 50500; then
+    dnl PHP 5.4
+    dnl ddtrace.c comes first, then everything else alphabetically
+    DD_TRACE_PHP_SOURCES="ext/php5/ddtrace.c \
+      ext/php5/arrays.c \
+      ext/php5/circuit_breaker.c \
+      ext/php5/comms_php.c \
+      ext/php5/compat_string.c \
+      ext/php5/coms.c \
+      ext/php5/configuration.c \
+      ext/php5/configuration_php_iface.c \
+      ext/php5/ddtrace_string.c \
+      ext/php5/dispatch.c \
+      ext/php5/dogstatsd_client.c \
+      ext/php5/engine_api.c \
+      ext/php5/engine_hooks.c \
+      ext/php5/env_config.c \
+      ext/php5/excluded_modules.c \
+      ext/php5/handlers_curl.c \
+      ext/php5/handlers_internal.c \
+      ext/php5/integrations/integrations.c \
+      ext/php5/logging.c \
+      ext/php5/memory_limit.c \
+      ext/php5/php5_4/auto_flush.c \
+      ext/php5/php5_4/dispatch.c \
+      ext/php5/php5_4/engine_hooks.c \
+      ext/php5/random.c \
+      ext/php5/request_hooks.c \
+      ext/php5/serializer.c \
+      ext/php5/signals.c \
+      ext/php5/span.c \
+      ext/php5/startup_logging.c \
     "
-  elif test $PHP_VERSION -lt 70000; then
-    DD_TRACE_PHP_VERSION_SPECIFIC_SOURCES="\
-      src/ext/php5/auto_flush.c \
-      src/ext/php5/blacklist.c \
-      src/ext/php5/dispatch.c \
-      src/ext/php5/distributed_tracing.c \
-      src/ext/php5/engine_api.c \
-      src/ext/php5/engine_hooks.c \
-      src/ext/php5/handlers_curl.c \
-      src/ext/php5/handlers_internal.c \
-      src/ext/php5/serializer.c \
-      src/ext/php5/startup_logging.c \
+  elif test $PHP_VERSION_ID -lt 70000; then
+    dnl PHP 5.5 + PHP 5.6
+    dnl ddtrace.c comes first, then everything else alphabetically
+    DD_TRACE_PHP_SOURCES="ext/php5/ddtrace.c \
+      ext/php5/arrays.c \
+      ext/php5/auto_flush.c \
+      ext/php5/circuit_breaker.c \
+      ext/php5/comms_php.c \
+      ext/php5/compat_string.c \
+      ext/php5/coms.c \
+      ext/php5/configuration.c \
+      ext/php5/configuration_php_iface.c \
+      ext/php5/ddtrace_string.c \
+      ext/php5/dispatch.c \
+      ext/php5/dogstatsd_client.c \
+      ext/php5/engine_api.c \
+      ext/php5/engine_hooks.c \
+      ext/php5/env_config.c \
+      ext/php5/excluded_modules.c \
+      ext/php5/handlers_curl.c \
+      ext/php5/handlers_internal.c \
+      ext/php5/integrations/integrations.c \
+      ext/php5/logging.c \
+      ext/php5/memory_limit.c \
+      ext/php5/php5/dispatch.c \
+      ext/php5/php5/engine_hooks.c \
+      ext/php5/random.c \
+      ext/php5/request_hooks.c \
+      ext/php5/serializer.c \
+      ext/php5/signals.c \
+      ext/php5/span.c \
+      ext/php5/startup_logging.c \
     "
-  elif test $PHP_VERSION -lt 80000; then
-    DD_TRACE_PHP_VERSION_SPECIFIC_SOURCES="\
-      src/ext/php7/auto_flush.c \
-      src/ext/php7/blacklist.c \
-      src/ext/php7/dispatch.c \
-      src/ext/php7/distributed_tracing.c \
-      src/ext/php7/engine_api.c \
-      src/ext/php7/engine_hooks.c \
-      src/ext/php7/handlers_curl.c \
-      src/ext/php7/handlers_internal.c \
-      src/ext/php7/handlers_memcached.c \
-      src/ext/php7/handlers_mysqli.c \
-      src/ext/php7/handlers_pdo.c \
-      src/ext/php7/serializer.c \
-      src/ext/php7/startup_logging.c \
+  elif test $PHP_VERSION_ID -lt 80000; then
+    dnl PHP 7.x
+    dnl ddtrace.c comes first, then everything else alphabetically
+    DD_TRACE_PHP_SOURCES="ext/php7/ddtrace.c \
+      ext/php7/arrays.c \
+      ext/php7/auto_flush.c \
+      ext/php7/circuit_breaker.c \
+      ext/php7/comms_php.c \
+      ext/php7/compat_string.c \
+      ext/php7/coms.c \
+      ext/php7/configuration.c \
+      ext/php7/configuration_php_iface.c \
+      ext/php7/ddtrace_string.c \
+      ext/php7/dispatch.c \
+      ext/php7/dogstatsd_client.c \
+      ext/php7/engine_api.c \
+      ext/php7/engine_hooks.c \
+      ext/php7/env_config.c \
+      ext/php7/excluded_modules.c \
+      ext/php7/handlers_curl.c \
+      ext/php7/handlers_internal.c \
+      ext/php7/handlers_memcached.c \
+      ext/php7/handlers_mysqli.c \
+      ext/php7/handlers_pdo.c \
+      ext/php7/handlers_phpredis.c \
+      ext/php7/integrations/integrations.c \
+      ext/php7/logging.c \
+      ext/php7/memory_limit.c \
+      ext/php7/php7/dispatch.c \
+      ext/php7/php7/engine_hooks.c \
+      ext/php7/random.c \
+      ext/php7/request_hooks.c \
+      ext/php7/serializer.c \
+      ext/php7/signals.c \
+      ext/php7/span.c \
+      ext/php7/startup_logging.c \
     "
-  else
-    DD_TRACE_PHP_VERSION_SPECIFIC_SOURCES=""
+  elif test $PHP_VERSION_ID -lt 90000; then
+    dnl PHP 8.x
+    dnl ddtrace.c comes first, then everything else alphabetically
+    DD_TRACE_PHP_SOURCES="ext/php8/ddtrace.c \
+      ext/php8/arrays.c \
+      ext/php8/auto_flush.c \
+      ext/php8/circuit_breaker.c \
+      ext/php8/comms_php.c \
+      ext/php8/compat_string.c \
+      ext/php8/coms.c \
+      ext/php8/configuration.c \
+      ext/php8/configuration_php_iface.c \
+      ext/php8/ddtrace_string.c \
+      ext/php8/dispatch.c \
+      ext/php8/dogstatsd_client.c \
+      ext/php8/engine_api.c \
+      ext/php8/engine_hooks.c \
+      ext/php8/env_config.c \
+      ext/php8/excluded_modules.c \
+      ext/php8/handlers_curl.c \
+      ext/php8/handlers_internal.c \
+      ext/php8/handlers_memcached.c \
+      ext/php8/handlers_mysqli.c \
+      ext/php8/handlers_pdo.c \
+      ext/php8/handlers_phpredis.c \
+      ext/php8/integrations/integrations.c \
+      ext/php8/logging.c \
+      ext/php8/memory_limit.c \
+      ext/php8/php8/dispatch.c \
+      ext/php8/php8/engine_hooks.c \
+      ext/php8/random.c \
+      ext/php8/request_hooks.c \
+      ext/php8/serializer.c \
+      ext/php8/signals.c \
+      ext/php8/span.c \
+      ext/php8/startup_logging.c \
+    "
   fi
 
-  PHP_NEW_EXTENSION(ddtrace, $DD_TRACE_PHP_SOURCES $DD_TRACE_PHP_VERSION_SPECIFIC_SOURCES, $ext_shared,, -DZEND_ENABLE_STATIC_TSRMLS_CACHE=1 -Wall -std=gnu11)
-  PHP_ADD_BUILD_DIR($ext_builddir/src/ext, 1)
+  PHP_NEW_EXTENSION(ddtrace, $DD_TRACE_VENDOR_SOURCES $DD_TRACE_PHP_SOURCES, $ext_shared,, -DZEND_ENABLE_STATIC_TSRMLS_CACHE=1 -Wall -std=gnu11)
+  PHP_ADD_BUILD_DIR($ext_builddir/ext, 1)
 
   PHP_CHECK_LIBRARY(rt, shm_open,
     [PHP_ADD_LIBRARY(rt, , EXTRA_LDFLAGS)])
@@ -119,23 +198,47 @@ if test "$PHP_DDTRACE" != "no"; then
   PHP_SUBST(EXTRA_LDFLAGS)
 
   PHP_ADD_INCLUDE([$ext_srcdir])
-  PHP_ADD_INCLUDE([$ext_srcdir/src/ext])
+  PHP_ADD_INCLUDE([$ext_srcdir/ext])
 
-  PHP_ADD_INCLUDE([$ext_srcdir/src/ext/mpack])
-  PHP_ADD_BUILD_DIR([$ext_builddir/src/ext/mpack])
+  PHP_ADD_INCLUDE([$ext_srcdir/ext/vendor])
+  PHP_ADD_BUILD_DIR([$ext_builddir/ext/vendor])
 
-  PHP_ADD_INCLUDE([$ext_srcdir/src/ext/integrations])
-  PHP_ADD_BUILD_DIR([$ext_builddir/src/ext/integrations])
+  PHP_ADD_INCLUDE([$ext_srcdir/ext/vendor/mpack])
+  PHP_ADD_BUILD_DIR([$ext_builddir/ext/vendor/mpack])
 
+  PHP_ADD_INCLUDE([$ext_srcdir/ext/vendor/mt19937])
+  PHP_ADD_BUILD_DIR([$ext_builddir/ext/vendor/mt19937])
+
+  dnl TODO Move this to ext/
   PHP_ADD_INCLUDE([$ext_srcdir/src/dogstatsd])
   PHP_ADD_BUILD_DIR([$ext_builddir/src/dogstatsd])
 
-  if test $PHP_VERSION -lt 50500; then
-    PHP_ADD_BUILD_DIR([$ext_builddir/src/ext/php5_4])
-  elif test $PHP_VERSION -lt 70000; then
-    PHP_ADD_BUILD_DIR([$ext_builddir/src/ext/php5])
-  elif test $PHP_VERSION -lt 80000; then
-    PHP_ADD_BUILD_DIR([$ext_builddir/src/ext/php7])
+  if test $PHP_VERSION_ID -lt 50500; then
+    dnl PHP 5.4
+    PHP_ADD_BUILD_DIR([$ext_builddir/ext/php5])
+    PHP_ADD_BUILD_DIR([$ext_builddir/ext/php5/php5_4])
+    PHP_ADD_BUILD_DIR([$ext_builddir/ext/php5/integrations])
+    PHP_ADD_INCLUDE([$ext_builddir/ext/php5/integrations])
+  elif test $PHP_VERSION_ID -lt 70000; then
+    dnl PHP 5.5 + PHP 5.6
+    PHP_ADD_BUILD_DIR([$ext_builddir/ext/php5])
+    dnl Temp dir until we merge dispatch.c and engine_hooks.c
+    PHP_ADD_BUILD_DIR([$ext_builddir/ext/php5/php5])
+    PHP_ADD_BUILD_DIR([$ext_builddir/ext/php5/integrations])
+    PHP_ADD_INCLUDE([$ext_builddir/ext/php5/integrations])
+  elif test $PHP_VERSION_ID -lt 80000; then
+    dnl PHP 7.0
+    PHP_ADD_BUILD_DIR([$ext_builddir/ext/php7])
+    dnl Temp dir until we merge dispatch.c and engine_hooks.c
+    PHP_ADD_BUILD_DIR([$ext_builddir/ext/php7/php7])
+    PHP_ADD_BUILD_DIR([$ext_builddir/ext/php7/integrations])
+    PHP_ADD_INCLUDE([$ext_builddir/ext/php7/integrations])
+  elif test $PHP_VERSION_ID -lt 90000; then
+    dnl PHP 8.0
+    PHP_ADD_BUILD_DIR([$ext_builddir/ext/php8])
+    dnl Temp dir until we merge dispatch.c and engine_hooks.c
+    PHP_ADD_BUILD_DIR([$ext_builddir/ext/php8/php8])
+    PHP_ADD_BUILD_DIR([$ext_builddir/ext/php8/integrations])
+    PHP_ADD_INCLUDE([$ext_builddir/ext/php8/integrations])
   fi
-  PHP_ADD_BUILD_DIR([$ext_builddir/src/ext/third-party])
 fi

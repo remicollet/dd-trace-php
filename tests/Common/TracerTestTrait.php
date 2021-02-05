@@ -125,7 +125,7 @@ trait TracerTestTrait
      * This method executes a request into an ad-hoc web server configured with the provided envs and inis that is
      * created and destroyed with the scope of this test.
      */
-    public function inWebServer($fn, $rootPath, $envs = [], $inis = [])
+    public function inWebServer($fn, $rootPath, $envs = [], $inis = [], &$curlInfo = null)
     {
         $this->resetRequestDumper();
         $webServer = new WebServer($rootPath, '0.0.0.0', 6666);
@@ -133,11 +133,16 @@ trait TracerTestTrait
         $webServer->mergeInis($inis);
         $webServer->start();
 
-        $fn(function (RequestSpec $request) use ($webServer) {
+        $fn(function (RequestSpec $request) use ($webServer, &$curlInfo) {
             if ($request instanceof GetSpec) {
                 $curl =  curl_init('http://127.0.0.1:6666' . $request->getPath());
                 curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($curl, CURLOPT_HTTPHEADER, $request->getHeaders());
                 $response = curl_exec($curl);
+                if (\is_array($curlInfo)) {
+                    $curlInfo = \array_merge($curlInfo, \curl_getinfo($curl));
+                }
+                \curl_close($curl);
                 $webServer->stop();
                 return $response;
             }
@@ -145,6 +150,37 @@ trait TracerTestTrait
             $webServer->stop();
             throw new Exception('Spec type not supported.');
         });
+
+        return $this->parseTracesFromDumpedData();
+    }
+
+    /**
+     * This method executes a single script with the provided configuration.
+     */
+    public function inCli($scriptPath, $customEnvs = [], $customInis = [], $arguments = '')
+    {
+        $this->resetRequestDumper();
+        $envs = (string) new EnvSerializer(array_merge(
+            [
+                'DD_TRACE_CLI_ENABLED' => 'true',
+                'DD_AGENT_HOST' => 'request-replayer',
+                'DD_TRACE_AGENT_PORT' => '80',
+                // Uncomment to see debug-level messages
+                //'DD_TRACE_DEBUG' => 'true',
+            ],
+            $customEnvs
+        ));
+        $inis = (string) new IniSerializer(array_merge(
+            [
+                'ddtrace.request_init_hook' => __DIR__ . '/../../bridge/dd_wrap_autoloader.php',
+            ],
+            $customInis
+        ));
+
+        $script = escapeshellarg($scriptPath);
+        $arguments = escapeshellarg($arguments);
+        $commandToExecute = "$envs php $inis $script $arguments";
+        `$commandToExecute`;
 
         return $this->parseTracesFromDumpedData();
     }

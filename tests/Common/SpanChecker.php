@@ -30,6 +30,14 @@ final class SpanChecker
     {
         $flattenTraces = $this->flattenTraces($traces);
         $actualGraph = $this->buildSpansGraph($flattenTraces);
+        if (\count($actualGraph) != \count($expectedFlameGraph)) {
+            TestCase::fail(\sprintf(
+                'Wrong number of root spans. Expected %d, actual: %s',
+                \count($expectedFlameGraph),
+                \count($actualGraph)
+            ));
+        }
+
         foreach ($expectedFlameGraph as $oneTrace) {
             if ($oneTrace->isToBeSkipped()) {
                 continue;
@@ -238,15 +246,13 @@ final class SpanChecker
      *
      * @param $traces
      * @param SpanAssertion[] $expectedSpans
-     * @param bool $isSandbox
      */
-    public function assertSpans($traces, $expectedSpans, $isSandbox = false)
+    public function assertSpans($traces, $expectedSpans)
     {
         $flattenTraces = $this->flattenTraces($traces);
-        if (true === $isSandbox) {
-            // The sandbox API pops closed spans off a stack so spans will be in reverse order
-            $flattenTraces = array_reverse($flattenTraces);
-        }
+        // The sandbox API pops closed spans off a stack so spans will be in reverse order
+        $flattenTraces = array_reverse($flattenTraces);
+
         // First we assert that ALL the expected spans are in the actual traces and no unexpected span exists.
         $expectedSpansReferences = array_map(function (SpanAssertion $assertion) {
             return $assertion->getOperationName();

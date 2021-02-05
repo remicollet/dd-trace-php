@@ -264,13 +264,13 @@ function ddtrace_config_http_client_split_by_domain_enabled()
 }
 
 /**
- * Whether or not sandboxed tracing closures are enabled.
+ * Set Redis client service name based on hostname
  *
  * @return bool
  */
-function ddtrace_config_sandbox_enabled()
+function ddtrace_config_redis_client_split_by_host_enabled()
 {
-    return \dd_trace_env_config("DD_TRACE_SANDBOX_ENABLED");
+    return \_ddtrace_config_bool(\getenv('DD_TRACE_REDIS_CLIENT_SPLIT_BY_HOST'), false);
 }
 
 /**

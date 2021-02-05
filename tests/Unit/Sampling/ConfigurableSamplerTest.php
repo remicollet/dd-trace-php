@@ -5,24 +5,24 @@ namespace DDTrace\Tests\Unit\Sampling;
 use DDTrace\Sampling\ConfigurableSampler;
 use DDTrace\Span;
 use DDTrace\SpanContext;
-use DDTrace\Tests\Unit\BaseTestCase;
+use DDTrace\Tests\Common\BaseTestCase;
 
 final class ConfigurableSamplerTest extends BaseTestCase
 {
     const REPETITIONS = 5000;
 
-    protected function setUp()
+    protected function ddSetUp()
     {
-        parent::setUp();
+        parent::ddSetUp();
         \putenv('DD_TRACE_SAMPLING_RULES');
         \putenv('DD_TRACE_SAMPLE_RATE');
     }
 
-    protected function tearDown()
+    protected function ddTearDown()
     {
         \putenv('DD_TRACE_SAMPLING_RULES');
         \putenv('DD_TRACE_SAMPLE_RATE');
-        parent::tearDown();
+        parent::ddTearDown();
     }
 
     /**
@@ -53,9 +53,13 @@ final class ConfigurableSamplerTest extends BaseTestCase
         return [
             // Edges
             [0.0, 0.0, 0.0],
+            // 0% provided as int.
+            [0, 0.0, 0.0],
             [1.0, 1.0, 1.0],
             [100, 1.0, 1.0],
             [-20, 0.0, 0.0],
+            // 100% provided as int.
+            [1, 1.00, 1.00],
 
             // Common cases
             [0.5, 0.47, 0.53],

@@ -9,28 +9,25 @@ use MongoCollection;
 use DDTrace\Integrations\IntegrationsLoader;
 use DDTrace\Tests\Common\SpanAssertion;
 use DDTrace\Tests\Common\IntegrationTestCase;
-use DDTrace\Configuration;
 
 class MongoTest extends IntegrationTestCase
 {
-    const IS_SANDBOX = false;
-
     const HOST = 'mongodb_integration';
     const PORT = '27017';
     const USER = 'test';
     const PASSWORD = 'test';
     const DATABASE = 'admin';
 
-    public static function setUpBeforeClass()
+    public static function ddSetUpBeforeClass()
     {
-        parent::setUpBeforeClass();
+        parent::ddSetUpBeforeClass();
         IntegrationsLoader::load();
     }
 
-    protected function tearDown()
+    protected function ddTearDown()
     {
         $this->clearDatabase();
-        parent::tearDown();
+        parent::ddTearDown();
     }
 
     // MongoClient tests

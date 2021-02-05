@@ -7,8 +7,6 @@ use DDTrace\Tests\Frameworks\Util\Request\GetSpec;
 
 final class StartupLoggingTest extends WebFrameworkTestCase
 {
-    const IS_SANDBOX = true;
-
     protected static function getAppIndexScript()
     {
         return __DIR__ . '/../../../Frameworks/Custom/Version_Autoloaded/public/index.php';
@@ -22,7 +20,7 @@ final class StartupLoggingTest extends WebFrameworkTestCase
     protected static function getEnvs()
     {
         return array_merge(parent::getEnvs(), [
-            'DD_TRACE_DEBUG' => true,
+            'DD_TRACE_DEBUG' => true, // Startup logs only show in debug mode
             'DD_ENV' => 'my-env',
             'DD_SERVICE' => 'my-service',
             'DD_TRACE_SAMPLE_RATE' => '0.42',
@@ -34,9 +32,9 @@ final class StartupLoggingTest extends WebFrameworkTestCase
         ]);
     }
 
-    protected function setUp()
+    protected function ddSetUp()
     {
-        parent::setUp();
+        parent::ddSetUp();
 
         // clear out any previous logs
         $log = self::getAppErrorLog();

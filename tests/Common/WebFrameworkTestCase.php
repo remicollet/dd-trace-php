@@ -24,19 +24,19 @@ abstract class WebFrameworkTestCase extends IntegrationTestCase
      */
     private static $appServer;
 
-    public static function setUpBeforeClass()
+    public static function ddSetUpBeforeClass()
     {
         $index = static::getAppIndexScript();
         if ($index) {
             ini_set('error_log', dirname($index) . '/' . static::ERROR_LOG_NAME);
         }
-        parent::setUpBeforeClass();
+        parent::ddSetUpBeforeClass();
         static::setUpWebServer();
     }
 
-    public static function tearDownAfterClass()
+    public static function ddTearDownAfterClass()
     {
-        parent::tearDownAfterClass();
+        parent::ddTearDownAfterClass();
         static::tearDownWebServer();
     }
 
@@ -63,10 +63,6 @@ abstract class WebFrameworkTestCase extends IntegrationTestCase
             'DD_TRACE_AGENT_FLUSH_INTERVAL' => static::FLUSH_INTERVAL_MS,
             'DD_AUTOLOAD_NO_COMPILE' => getenv('DD_AUTOLOAD_NO_COMPILE'),
         ];
-
-        if (!self::isSandboxed()) {
-            $envs['DD_TRACE_SANDBOX_ENABLED'] = 'false';
-        }
 
         return $envs;
     }

@@ -2,7 +2,6 @@
 
 namespace DDTrace\Tests\Unit;
 
-use DDTrace\Configuration;
 use DDTrace\Format;
 use DDTrace\Sampling\PrioritySampling;
 use DDTrace\SpanContext;
@@ -11,6 +10,7 @@ use DDTrace\Tests\DebugTransport;
 use DDTrace\Time;
 use DDTrace\Tracer;
 use DDTrace\Transport\Noop as NoopTransport;
+use DDTrace\Tests\Common\BaseTestCase;
 
 function baz()
 {
@@ -24,17 +24,17 @@ final class TracerTest extends BaseTestCase
     const TAG_VALUE = 'test_value';
     const FORMAT = 'test_format';
 
-    protected function setUp()
+    protected function ddSetUp()
     {
         \putenv('DD_AUTOFINISH_SPANS');
         \putenv('DD_TRACE_REPORT_HOSTNAME');
         \putenv('DD_TAGS');
-        parent::setUp();
+        parent::ddSetUp();
     }
 
-    protected function tearDown()
+    protected function ddTearDown()
     {
-        parent::tearDown();
+        parent::ddTearDown();
         \putenv('DD_TRACE_REPORT_HOSTNAME');
         \putenv('DD_AUTOFINISH_SPANS');
         \putenv('DD_TAGS');
@@ -100,11 +100,9 @@ final class TracerTest extends BaseTestCase
         $this->assertEquals($parentScope->getSpan()->getService(), $childScope->getSpan()->getService());
     }
 
-    /**
-     * @expectedException \DDTrace\Exceptions\UnsupportedFormat
-     */
     public function testInjectThrowsUnsupportedFormatException()
     {
+        $this->setExpectedException('\DDTrace\Exceptions\UnsupportedFormat');
         $context = SpanContext::createAsRoot();
         $carrier = [];
 
@@ -123,11 +121,9 @@ final class TracerTest extends BaseTestCase
         $tracer->inject($context, self::FORMAT, $carrier);
     }
 
-    /**
-     * @expectedException \DDTrace\Exceptions\UnsupportedFormat
-     */
     public function testExtractThrowsUnsupportedFormatException()
     {
+        $this->setExpectedException('\DDTrace\Exceptions\UnsupportedFormat');
         $carrier = [];
         $tracer = new Tracer(new NoopTransport());
         $tracer->extract(self::FORMAT, $carrier);
@@ -277,10 +273,6 @@ final class TracerTest extends BaseTestCase
 
     public function testInternalAndUserlandSpansAreMergedIntoSameTraceOnSerialization()
     {
-        if (PHP_VERSION_ID < 50600) {
-            $this->markTestSkipped('Sandbox API not available on < PHP 5.6');
-            return;
-        }
         // Clear existing internal spans
         dd_trace_serialize_closed_spans();
 

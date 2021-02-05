@@ -25,8 +25,11 @@ final class Tracer implements TracerInterface
 
     /**
      * @deprecated Use Tracer::version() instead
+     *
+     * Must begin with a number for Debian packaging requirements
+     * Must use single-quotes for packaging script to work
      */
-    const VERSION = '1.0.0-nightly'; // Update ./version.php too
+    const VERSION = '1.0.0-nightly';
 
     /**
      * @var Span[][]
@@ -83,11 +86,6 @@ final class Tracer implements TracerInterface
      * @var string
      */
     private $prioritySampling = Sampling\PrioritySampling::UNKNOWN;
-
-    /**
-     * @var string|null
-     */
-    private static $version;
 
     /**
      * @var string|null The user's service version, e.g. '1.2.3'
@@ -359,6 +357,14 @@ final class Tracer implements TracerInterface
         $autoFinishSpans = \ddtrace_config_autofinish_span_enabled();
         $serviceMappings = \ddtrace_config_service_mapping();
 
+        $root = $this->getSafeRootSpan();
+        if ($root) {
+            $meta = \DDTrace\additional_trace_meta();
+            foreach ($meta as $tag => $value) {
+                $root->setTag($tag, $value, true);
+            }
+        }
+
         foreach ($this->traces as $trace) {
             $traceToBeSent = [];
             foreach ($trace as $span) {
@@ -532,10 +538,7 @@ final class Tracer implements TracerInterface
      */
     public static function version()
     {
-        if (empty(self::$version)) {
-            self::$version = include __DIR__ . '/version.php';
-        }
-        return self::$version;
+        return self::VERSION;
     }
 
     /**

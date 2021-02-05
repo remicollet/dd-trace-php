@@ -1,10 +1,13 @@
 **/vendor
+!/ext/vendor
 tmp/build_extension/
 composer.lock
+**/core*
 .scenarios.lock/
 .vscode/
 .libs
 .deps
+.phpunit.result.cache
 **.code-workspace
 /Makefile*
 acinclude.m4
@@ -19,8 +22,7 @@ configure
 *.o
 *.so
 install-sh
-error.log
-dd_php_error.log
+*.log
 nginx.pid
 tests/Frameworks/**/*.log
 libtool
@@ -36,7 +38,6 @@ tests/ext/*.diff
 tests/ext/*.log
 tests/ext/*.exp
 tests/ext/*.sh
-tests/ext/*.log
 tests/ext/*.mem
 tmp-php.ini
 tmp/opcache*
