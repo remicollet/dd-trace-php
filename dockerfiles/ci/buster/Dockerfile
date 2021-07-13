@@ -16,6 +16,7 @@ ENV RUNTIME_DEPS \
     libcurl4-openssl-dev \
     libedit-dev \
     libmcrypt-dev \
+    libmemcached-dev \
     libonig-dev \
     libpq-dev \
     libsodium-dev \
@@ -81,22 +82,42 @@ RUN set -eux; \
     \
 # Allow nginx to be run as non-root for tests
     chown -R circleci:circleci /var/log/nginx/ /var/lib/nginx/; \
-# JSON parser
-    export JQ_URL="https://circle-downloads.s3.amazonaws.com/circleci-images/cache/linux-amd64/jq-latest"; \
-    curl --silent --show-error --location --fail --retry 3 --output /usr/bin/jq $JQ_URL; \
-    chmod +x /usr/bin/jq; \
-    jq --version; \
-    \
+# Install CMake
+    CMAKE_VERSION="3.20.1"; \
+    CMAKE_SHA256="b8c141bd7a6d335600ab0a8a35e75af79f95b837f736456b5532f4d717f20a09"; \
+    cd /tmp && curl -OL https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-Linux-x86_64.tar.gz; \
+    (echo "${CMAKE_SHA256} cmake-${CMAKE_VERSION}-Linux-x86_64.tar.gz" | sha256sum -c -); \
+    mkdir -p /opt/cmake/${CMAKE_VERSION}; \
+    tar --strip-components 1 -C /opt/cmake/${CMAKE_VERSION} -xf /tmp/cmake-${CMAKE_VERSION}-Linux-x86_64.tar.gz; \
+# Currently there's only one version of smake, make it default
+    ln -s /opt/cmake/${CMAKE_VERSION}/bin/cmake /usr/local/bin/cmake; \
+# Install Catch2
+    CATCH2_VERSION="2.13.5"; \
+    CATCH2_SHA256="7fee7d643599d10680bfd482799709f14ed282a8b7db82f54ec75ec9af32fa76"; \
+    cd /tmp && curl -OL https://github.com/catchorg/Catch2/archive/v${CATCH2_VERSION}.tar.gz; \
+    (echo "${CATCH2_SHA256} v${CATCH2_VERSION}.tar.gz" | sha256sum -c -); \
+    mkdir catch2 && cd catch2; \
+    tar -xf ../v${CATCH2_VERSION}.tar.gz --strip 1; \
+    /opt/cmake/${CMAKE_VERSION}/bin/cmake -Bbuild -H. -DBUILD_TESTING=OFF -DCMAKE_INSTALL_PREFIX=/opt/catch2; \
+    /opt/cmake/${CMAKE_VERSION}/bin/cmake --build build/ --target install; \
+# Install lcov
+    LCOV_VERSION="1.15"; \
+    LCOV_SHA256="c1cda2fa33bec9aa2c2c73c87226cfe97de0831887176b45ee523c5e30f8053a"; \
+    cd /tmp && curl -OL https://github.com/linux-test-project/lcov/releases/download/v${LCOV_VERSION}/lcov-${LCOV_VERSION}.tar.gz; \
+    (echo "${LCOV_SHA256} lcov-${LCOV_VERSION}.tar.gz" | sha256sum -c -); \
+    mkdir lcov && cd lcov; \
+    tar -xf ../lcov-${LCOV_VERSION}.tar.gz --strip 1; \
+    make install; \
+    lcov --version;\
 # Docker
-    export COMPOSE_URL="https://circle-downloads.s3.amazonaws.com/circleci-images/cache/linux-amd64/docker-compose-latest"; \
-    curl --silent --show-error --location --fail --retry 3 --output /usr/bin/docker-compose $COMPOSE_URL; \
-    chmod +x /usr/bin/docker-compose; \
-    docker-compose version; \
-    \
-    export DOCKERIZE_URL="https://circle-downloads.s3.amazonaws.com/circleci-images/cache/linux-amd64/dockerize-latest.tar.gz"; \
-    curl --silent --show-error --location --fail --retry 3 --output /tmp/dockerize-linux-amd64.tar.gz $DOCKERIZE_URL; \
-    tar -C /usr/local/bin -xzvf /tmp/dockerize-linux-amd64.tar.gz; \
-    rm -rf /tmp/dockerize-linux-amd64.tar.gz; \
+    DOCKERIZE_VERSION="0.6.1"; \
+    DOCKERIZE_SHA256="1fa29cd41a5854fd5423e242f3ea9737a50a8c3bcf852c9e62b9eb02c6ccd370"; \
+    curl --silent --show-error --location --fail --retry 3 \
+        --output /tmp/dockerize-linux-amd64-v${DOCKERIZE_VERSION}.tar.gz \
+        https://github.com/jwilder/dockerize/releases/download/v${DOCKERIZE_VERSION}/dockerize-linux-amd64-v${DOCKERIZE_VERSION}.tar.gz; \
+    (echo "${DOCKERIZE_SHA256} /tmp/dockerize-linux-amd64-v${DOCKERIZE_VERSION}.tar.gz" | sha256sum -c -); \
+    tar -C /usr/local/bin -xzvf /tmp/dockerize-linux-amd64-v${DOCKERIZE_VERSION}.tar.gz; \
+    rm -rf /tmp/dockerize-linux-amd64-v${DOCKERIZE_VERSION}.tar.gz; \
     dockerize --version;
 
 # Apache config
@@ -177,6 +198,9 @@ RUN set -eux; \
 # Pretty prompt
     echo "PS1='\[\033[01;32m\]\u\[\033[00m\]\[\033[00;35m\](buster)\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ '" | \
         tee -a /home/circleci/.bashrc; \
+# Autocomplete of Makefile targets (see: https://stackoverflow.com/a/38415982)
+    echo "complete -W \"\\\`grep -oE '^[a-zA-Z0-9_.-]+:([^=]|$)' ?akefile | sed 's/[^a-zA-Z0-9_.-]*$//'\\\`\" make" | \
+        tee -a /home/circleci/.bashrc; \
 # Handy aliases
     echo "alias ll='ls -al'" | \
         tee -a /home/circleci/.bash_aliases; \
@@ -184,6 +208,7 @@ RUN set -eux; \
     echo 'set history save on' >> /home/circleci/.gdbinit; \
         chmod 600 /home/circleci/.gdbinit;
 
+COPY install-ext-from-source /usr/local/bin/install-ext-from-source
 COPY switch-php /usr/local/bin/
 
 WORKDIR /home/circleci
@@ -194,3 +219,5 @@ STOPSIGNAL SIGQUIT
 
 EXPOSE 9000
 EXPOSE 80
+
+CMD [ "bash" ]

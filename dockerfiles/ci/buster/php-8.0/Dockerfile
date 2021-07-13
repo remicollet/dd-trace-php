@@ -1,9 +1,9 @@
 FROM datadog/dd-trace-ci:buster AS base
 
 ARG phpVersion
-ENV PHP_INSTALL_DIR_DEBUG_ZTS_ASAN=${PHP_INSTALL_DIR}/${phpVersion}-debug-zts-asan
-ENV PHP_INSTALL_DIR_DEBUG_NTS=${PHP_INSTALL_DIR}/${phpVersion}-debug
-ENV PHP_INSTALL_DIR_NTS=${PHP_INSTALL_DIR}/${phpVersion}
+ENV PHP_INSTALL_DIR_DEBUG_ZTS_ASAN=${PHP_INSTALL_DIR}/debug-zts-asan
+ENV PHP_INSTALL_DIR_DEBUG_NTS=${PHP_INSTALL_DIR}/debug
+ENV PHP_INSTALL_DIR_NTS=${PHP_INSTALL_DIR}/nts
 ENV PHP_VERSION=${phpVersion}
 
 FROM base as build
@@ -11,7 +11,7 @@ ARG phpTarGzUrl
 ARG phpSha256Hash
 RUN set -eux; \
     curl -fsSL -o /tmp/php.tar.gz "${phpTarGzUrl}"; \
-    (echo "${phpSha256Hash} /tmp/php.tar.gz" | sha256sum -); \
+    (echo "${phpSha256Hash} /tmp/php.tar.gz" | sha256sum -c -); \
     tar xf /tmp/php.tar.gz -C "${PHP_SRC_DIR}" --strip-components=1; \
     rm -f /tmp/php.tar.gz; \
     cd ${PHP_SRC_DIR}; \
@@ -67,13 +67,14 @@ RUN set -eux; \
     do \
         echo "Install exts for PHP $phpVer..."; \
         switch-php ${phpVer}; \
+        pecl channel-update pecl.php.net; \
         iniDir=$(php -i | awk -F"=> " '/Scan this dir for additional .ini files/ {print $2}'); \
         \
         yes '' | pecl install apcu; echo "extension=apcu.so" >> ${iniDir}/apcu.ini; \
         pecl install ast; echo "extension=ast.so" >> ${iniDir}/ast.ini; \
         #yes 'no' | pecl install memcached; \ # TODO Does not support PHP 8 yet
         pecl install mongodb; echo "extension=mongodb.so" >> ${iniDir}/mongodb.ini; \
-        pecl install redis-5.3.2; echo "extension=redis.so" >> ${iniDir}/redis.ini; \
+        pecl install redis; echo "extension=redis.so" >> ${iniDir}/redis.ini; \
         # Xdebug is disabled by default
         pecl install xdebug-3.0.0; \
         cd $(php-config --extension-dir); \
@@ -82,7 +83,7 @@ RUN set -eux; \
 
 RUN set -eux; \
 # Set the default PHP version
-    switch-php ${PHP_VERSION}-debug;
+    switch-php debug;
 
 # Install Composer
 COPY --from=composer:1 /usr/bin/composer /usr/local/bin/composer

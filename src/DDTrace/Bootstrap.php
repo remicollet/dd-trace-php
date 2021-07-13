@@ -5,6 +5,7 @@ namespace DDTrace;
 use DDTrace\Http\Request;
 use DDTrace\Integrations\IntegrationsLoader;
 use DDTrace\Integrations\Web\WebIntegration;
+use DDTrace\Private_;
 
 /**
  * Bootstrap the the datadog tracer.
@@ -28,18 +29,21 @@ final class Bootstrap
         self::$bootstrapped = true;
 
         $tracer = self::resetTracer();
+        if (PHP_VERSION_ID < 80000) {
+            \DDTrace\hook_method('DDTrace\\Bootstrap', 'flushTracerShutdown', null, function () {
+                $tracer = GlobalTracer::get();
+                $scopeManager = $tracer->getScopeManager();
+                $scopeManager->close();
+                if (!\dd_trace_env_config('DD_TRACE_AUTO_FLUSH_ENABLED')) {
+                    $tracer->flush();
+                }
+            });
+        }
 
-        \DDTrace\hook_method('DDTrace\\Bootstrap', 'flushTracerShutdown', null, function () {
-            $tracer = GlobalTracer::get();
-            $scopeManager = $tracer->getScopeManager();
-            $scopeManager->close();
-            if (!\dd_trace_env_config('DD_TRACE_AUTO_FLUSH_ENABLED')) {
-                $tracer->flush();
+        if (\dd_trace_env_config('DD_TRACE_GENERATE_ROOT_SPAN') || PHP_VERSION_ID < 80000) {
+            if (\dd_trace_env_config('DD_TRACE_GENERATE_ROOT_SPAN')) {
+                self::initRootSpan($tracer);
             }
-        });
-
-        if (\dd_trace_env_config('DD_TRACE_GENERATE_ROOT_SPAN')) {
-            self::initRootSpan($tracer);
             register_shutdown_function(function () {
                 /*
                 * Register the shutdown handler during shutdown so that it is run after all the other shutdown handlers.
@@ -50,7 +54,26 @@ final class Bootstrap
                 */
                 register_shutdown_function(function () {
                     // We wrap the call in a closure to prevent OPcache from skipping the call.
-                    Bootstrap::flushTracerShutdown();
+                    if (PHP_VERSION_ID < 80000) { // internal handling
+                        Bootstrap::flushTracerShutdown();
+                    } else {
+                        $tracer = GlobalTracer::get();
+                        // this also gets set when creating a root span, but may not have the latest up-to-date data
+                        if (
+                            'cli' !== PHP_SAPI && \ddtrace_config_url_resource_name_enabled()
+                            && $rootScope = $tracer->getRootScope()
+                        ) {
+                            $tracer->addUrlAsResourceNameToSpan($rootScope->getSpan());
+                        }
+                        /*
+                         * Having this priority sampling here is actually a bug (should happen after service name
+                         * substitutions), but it was this way before the refactor, so let's fix this in a
+                         * subsequent release, when we will have ported everything else to the extension.
+                         */
+                        if (method_exists($tracer, "enforcePrioritySamplingOnRootSpan")) {
+                            $tracer->enforcePrioritySamplingOnRootSpan();
+                        }
+                    }
                 });
             });
         }
@@ -102,12 +125,13 @@ final class Bootstrap
             $span->setTag(Tag::SPAN_TYPE, Type::CLI);
         } else {
             $operationName = 'web.request';
+            $httpHeaders = Request::getHeaders();
             $span = $tracer->startRootSpan(
                 $operationName,
                 StartSpanOptionsFactory::createForWebRequest(
                     $tracer,
                     $options,
-                    Request::getHeaders()
+                    $httpHeaders
                 )
             )->getSpan();
             $span->setTag(Tag::SPAN_TYPE, Type::WEB_SERVLET);
@@ -119,6 +143,19 @@ final class Bootstrap
             }
             // Status code defaults to 200, will be later on changed when http_response_code will be called
             $span->setTag(Tag::HTTP_STATUS_CODE, 200);
+
+            // Adding configured incoming request http headers
+            foreach (Private_\util_extract_configured_headers_as_tags($httpHeaders, true) as $tag => $value) {
+                $span->setTag($tag, $value);
+            }
+
+            if (PHP_VERSION_ID >= 80000) {
+                foreach ($httpHeaders as $header => $value) {
+                    if (stripos($header, Propagator::DEFAULT_ORIGIN_HEADER) === 0) {
+                        add_global_tag(Tag::ORIGIN, $value);
+                    }
+                }
+            }
         }
         $integration = WebIntegration::getInstance();
         $integration->addTraceAnalyticsIfEnabledLegacy($span);
@@ -134,6 +171,21 @@ final class Bootstrap
 
             if (isset($parsedHttpStatusCode)) {
                 $rootSpan->setTag(Tag::HTTP_STATUS_CODE, $parsedHttpStatusCode);
+            }
+
+            // Adding configured outgoing response http headers
+            if (isset($args[0]) && \is_string($args[0])) {
+                $headerParts = explode(':', $args[0], 2);
+                if (count($headerParts) == 2) {
+                    foreach (
+                        Private_\util_extract_configured_headers_as_tags(
+                            [$headerParts[0] => $headerParts[1]],
+                            false
+                        ) as $tag => $value
+                    ) {
+                        $rootSpan->setTag($tag, $value);
+                    }
+                }
             }
         });
 

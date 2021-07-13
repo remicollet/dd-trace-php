@@ -1,17 +1,14 @@
 --TEST--
 Auto-flushing will sandbox an exception thrown from the tracer flush
 --SKIPIF--
-<?php if (PHP_VERSION_ID < 50500) die('skip: PHP 5.4 not supported'); ?>
-<?php if (PHP_VERSION_ID < 70000) die('skip: Auto flushing not supported on PHP 5'); ?>
+<?php if (PHP_VERSION_ID < 80000) die('skip: Test requires internal spans'); ?>
 --ENV--
 DD_TRACE_DEBUG=1
 DD_TRACE_AUTO_FLUSH_ENABLED=1
+DD_TRACE_GENERATE_ROOT_SPAN=0
 --FILE--
 <?php
 use DDTrace\SpanData;
-
-require 'fake_tracer_exception.inc';
-require 'fake_global_tracer.inc';
 
 class Foo
 {
@@ -38,6 +35,6 @@ try {
 }
 ?>
 --EXPECT--
-Flushing tracer with exception...
-Unable to auto flush the tracer
+Successfully triggered flush with trace of size 1
 Caught exception: Oops!
+No finished traces to be sent to the agent

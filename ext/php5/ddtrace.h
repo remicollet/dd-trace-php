@@ -24,6 +24,8 @@ ZEND_BEGIN_MODULE_GLOBALS(ddtrace)
     zend_bool disable_in_current_request;
     char *request_init_hook;
     zend_bool request_init_hook_loaded;
+    // When 'drop_all_spans' is set, traces have to be dropped and not sent to the serializer and the sender.
+    zend_bool drop_all_spans;
 
     uint32_t traces_group_id;
     HashTable *class_lookup;
@@ -61,6 +63,8 @@ ZEND_BEGIN_MODULE_GLOBALS(ddtrace)
     uint32_t open_spans_count;
     uint32_t closed_spans_count;
     int64_t compile_time_microseconds;
+
+    char *cgroup_file;
 ZEND_END_MODULE_GLOBALS(ddtrace)
 // clang-format on
 

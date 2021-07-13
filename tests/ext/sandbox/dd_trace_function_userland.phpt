@@ -1,5 +1,7 @@
 --TEST--
 DDTrace\trace_function() can trace userland functions with internal spans
+--SKIPIF--
+<?php if (PHP_VERSION_ID < 80000) die('skip: Test requires internal spans'); ?>
 --FILE--
 <?php
 use DDTrace\SpanData;
@@ -40,9 +42,11 @@ array(1) {
   [0]=>
   array(7) {
     ["trace_id"]=>
-    int(%d)
+    string(%d) "%d"
     ["span_id"]=>
-    int(%d)
+    string(%d) "%d"
+    ["parent_id"]=>
+    string(%d) "%d"
     ["start"]=>
     int(%d)
     ["duration"]=>
@@ -51,11 +55,6 @@ array(1) {
     string(15) "filter_to_array"
     ["resource"]=>
     string(15) "filter_to_array"
-    ["meta"]=>
-    array(1) {
-      ["system.pid"]=>
-      string(%d) "%d"
-    }
   }
 }
 array(0) {

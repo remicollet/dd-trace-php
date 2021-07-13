@@ -93,6 +93,9 @@ function _ddtrace_config_json($value, $default)
         return $default;
     }
 
+    // If the char `'` used to escape the json object reaches this variable, it has to be removed.
+    $value = trim($value, "'");
+
     $parsed = \json_decode($value, true);
     if (null === $parsed) {
         return $default;
@@ -354,4 +357,17 @@ function ddtrace_config_global_tags()
 function ddtrace_config_service_mapping()
 {
     return \_ddtrace_config_associative_array(\getenv('DD_SERVICE_MAPPING'), []);
+}
+
+/**
+ * Returns the list of header names to be added as a tag to the root span. Header names are converted to lowercase.
+ */
+function ddtrace_config_http_headers()
+{
+    return array_map(
+        function ($header) {
+            return \strtolower($header);
+        },
+        \_ddtrace_config_indexed_array(\getenv('DD_TRACE_HEADER_TAGS'), [])
+    );
 }

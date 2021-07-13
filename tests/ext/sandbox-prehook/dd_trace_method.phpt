@@ -2,8 +2,10 @@
 [Prehook Regression] DDTrace\trace_method() can trace with internal spans
 --SKIPIF--
 <?php if (PHP_VERSION_ID < 70000) die('skip: Prehook not supported on PHP 5'); ?>
+<?php if (PHP_VERSION_ID < 80000) die('skip: Test requires internal spans'); ?>
 --ENV--
 DD_TRACE_TRACED_INTERNAL_FUNCTIONS=mt_rand
+DD_TRACE_GENERATE_ROOT_SPAN=0
 --FILE--
 <?php
 use DDTrace\SpanData;
@@ -70,7 +72,7 @@ $testService = new TestService();
 $testService->testServiceFoo();
 
 $foo = new Foo();
-$ret = $foo->bar('tracing is awesome', ['first', 'foo-red', 'bar-green']);
+$ret = $foo->bar('tracing is awesome', ['first', '100', false]);
 var_dump($ret);
 
 echo "---\n";
@@ -95,9 +97,9 @@ array(3) {
   [0]=>
   array(10) {
     ["trace_id"]=>
-    int(%d)
+    string(%d) "%d"
     ["span_id"]=>
-    int(%d)
+    string(%d) "%d"
     ["start"]=>
     int(%d)
     ["duration"]=>
@@ -118,21 +120,23 @@ array(3) {
       string(%d) "%d"
     }
     ["metrics"]=>
-    array(2) {
+    array(3) {
       ["foo"]=>
-      string(7) "foo-red"
+      float(100)
       ["bar"]=>
-      string(9) "bar-green"
+      float(0)
+      ["php.compilation.total_time_ms"]=>
+      float(%f)
     }
   }
   [1]=>
   array(8) {
     ["trace_id"]=>
-    int(%d)
+    string(%d) "%d"
     ["span_id"]=>
-    int(%d)
+    string(%d) "%d"
     ["parent_id"]=>
-    int(%d)
+    string(%d) "%d"
     ["start"]=>
     int(%d)
     ["duration"]=>
@@ -148,11 +152,11 @@ array(3) {
     }
   }
   [2]=>
-  array(7) {
+  array(8) {
     ["trace_id"]=>
-    int(%d)
+    string(%d) "%d"
     ["span_id"]=>
-    int(%d)
+    string(%d) "%d"
     ["start"]=>
     int(%d)
     ["duration"]=>
@@ -165,6 +169,11 @@ array(3) {
     array(1) {
       ["system.pid"]=>
       string(%d) "%d"
+    }
+    ["metrics"]=>
+    array(1) {
+      ["php.compilation.total_time_ms"]=>
+      float(%f)
     }
   }
 }

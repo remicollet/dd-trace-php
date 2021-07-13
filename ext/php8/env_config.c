@@ -15,8 +15,8 @@
 #define EQUALS(stra, stra_len, literal_strb) \
     (stra_len == (sizeof(literal_strb) - 1) && memcmp(stra, literal_strb, sizeof(literal_strb) - 1) == 0)
 
-char *ddtrace_getenv(char *name, size_t name_len TSRMLS_DC) {
-    char *env = sapi_getenv(name, name_len TSRMLS_CC);
+char *ddtrace_getenv(char *name, size_t name_len) {
+    char *env = sapi_getenv(name, name_len);
     if (env) {
         return env;
     }
@@ -24,21 +24,21 @@ char *ddtrace_getenv(char *name, size_t name_len TSRMLS_DC) {
     return env ? estrdup(env) : NULL;
 }
 
-char *ddtrace_getenv_multi(char *primary, size_t primary_len, char *secondary, size_t secondary_len TSRMLS_DC) {
+char *ddtrace_getenv_multi(char *primary, size_t primary_len, char *secondary, size_t secondary_len) {
     // Primary env name, if exists
-    char *env = ddtrace_getenv(primary, primary_len TSRMLS_CC);
+    char *env = ddtrace_getenv(primary, primary_len);
     if (env) {
         return env;
     }
     // Otherwise we use the secondary env name
-    return ddtrace_getenv(secondary, secondary_len TSRMLS_CC);
+    return ddtrace_getenv(secondary, secondary_len);
 }
 
-char *get_local_env_or_sapi_env(char *name TSRMLS_DC) {
+char *get_local_env_or_sapi_env(char *name) {
     char *env = NULL;
     // reading sapi_getenv from within writer thread can and will lead to undefined behaviour
     if (!ddtrace_in_writer_thread()) {
-        env = sapi_getenv(name, strlen(name) TSRMLS_CC);
+        env = sapi_getenv(name, strlen(name));
         if (env) {
             // convert PHP memory to pure C memory since this could be used in non request contexts too
             // currently we're not using permanent C memory anywhere, while this could be applied here
@@ -53,8 +53,8 @@ char *get_local_env_or_sapi_env(char *name TSRMLS_DC) {
     return env ? ddtrace_strdup(env) : NULL;
 }
 
-BOOL_T ddtrace_get_bool_config(char *name, BOOL_T def TSRMLS_DC) {
-    char *env = get_local_env_or_sapi_env(name TSRMLS_CC);
+BOOL_T ddtrace_get_bool_config(char *name, BOOL_T def) {
+    char *env = get_local_env_or_sapi_env(name);
     if (!env) {
         return def;
     }
@@ -78,8 +78,8 @@ BOOL_T ddtrace_get_bool_config(char *name, BOOL_T def TSRMLS_DC) {
     return rv;
 }
 
-int64_t ddtrace_get_int_config(char *name, int64_t def TSRMLS_DC) {
-    char *env = get_local_env_or_sapi_env(name TSRMLS_CC);
+int64_t ddtrace_get_int_config(char *name, int64_t def) {
+    char *env = get_local_env_or_sapi_env(name);
     if (!env) {
         return def;
     }
@@ -98,16 +98,16 @@ int64_t ddtrace_get_int_config(char *name, int64_t def TSRMLS_DC) {
     return result;
 }
 
-uint32_t ddtrace_get_uint32_config(char *name, uint32_t def TSRMLS_DC) {
-    int64_t value = ddtrace_get_int_config(name, def TSRMLS_CC);
+uint32_t ddtrace_get_uint32_config(char *name, uint32_t def) {
+    int64_t value = ddtrace_get_int_config(name, def);
     if (value < 0 || value > UINT32_MAX) {
         value = def;
     }
     return value;
 }
 
-double ddtrace_get_double_config(char *name, double def TSRMLS_DC) {
-    char *env = get_local_env_or_sapi_env(name TSRMLS_CC);
+double ddtrace_get_double_config(char *name, double def) {
+    char *env = get_local_env_or_sapi_env(name);
     if (!env) {
         return def;
     }
@@ -139,8 +139,8 @@ double ddtrace_char_to_double(char *subject, double default_value) {
     return conversion_performed ? result : default_value;
 }
 
-char *ddtrace_get_c_string_config(char *name TSRMLS_DC) {
-    char *env = get_local_env_or_sapi_env(name TSRMLS_CC);
+char *ddtrace_get_c_string_config(char *name) {
+    char *env = get_local_env_or_sapi_env(name);
     if (!env) {
         return NULL;
     } else {
@@ -148,8 +148,8 @@ char *ddtrace_get_c_string_config(char *name TSRMLS_DC) {
     }
 }
 
-char *ddtrace_get_c_string_config_with_default(char *name, const char *def TSRMLS_DC) {
-    char *env = get_local_env_or_sapi_env(name TSRMLS_CC);
+char *ddtrace_get_c_string_config_with_default(char *name, const char *def) {
+    char *env = get_local_env_or_sapi_env(name);
     if (!env) {
         if (def) {
             return ddtrace_strdup(def);
@@ -169,4 +169,66 @@ char *ddtrace_strdup(const char *source) {
         memcpy(dest, source, size);
     }
     return dest;
+}
+
+static void ddtrace_config_str_dtor(zval *zval_ptr) {
+    ZEND_ASSERT(Z_TYPE_P(zval_ptr) == IS_STRING);
+    zend_string_release_ex(Z_STR_P(zval_ptr), 1);
+}
+
+zend_array *ddtrace_parse_c_string_to_hash(const char *data) {
+    zend_array *array = malloc(sizeof(*array));
+    _zend_hash_init(array, 0, ddtrace_config_str_dtor, 1);
+    if (data && *data) {  // non-empty
+        const char *key_start, *key_end, *value_start, *value_end;
+        do {
+            if (*data != ',' && *data != ' ' && *data != '\t' && *data != '\n') {
+                key_start = key_end = data;
+                while (*++data) {
+                    if (*data == ':') {
+                        while (*++data && (*data == ' ' || *data == '\t' || *data == '\n'))
+                            ;
+
+                        if (!*data) {
+                            break;
+                        }
+
+                        value_start = value_end = data;
+                        if (*data == ',') {
+                            --value_end;  // empty string instead of single char
+                        } else {
+                            while (*++data && *data != ',') {
+                                if (*data != ' ' && *data != '\t' && *data != '\n') {
+                                    value_end = data;
+                                }
+                            }
+                        }
+
+                        zval val;
+                        zend_string *key = zend_string_init(key_start, key_end - key_start + 1, 1);
+                        ZVAL_PSTRINGL(&val, value_start, value_end - value_start + 1);
+                        zend_hash_add(array, key, &val);
+                        zend_string_release(key);
+
+                        break;
+                    }
+                    if (*data != ' ' && *data != '\t' && *data != '\n') {
+                        key_end = data;
+                    }
+                }
+            } else {
+                ++data;
+            }
+        } while (*data);
+    }
+    return array;
+}
+
+// Note that these arrays shall never be touched, except GC_ADDREF() and zend_hash_release() to avoid non-atomic
+// operations causing possible race conditions
+zend_array *ddtrace_get_hash_config(char *name) {
+    char *str = ddtrace_get_c_string_config_with_default(name, "");
+    zend_array *array = ddtrace_parse_c_string_to_hash(str);
+    free(str);
+    return array;
 }

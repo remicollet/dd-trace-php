@@ -29,7 +29,6 @@ static void _free_span(ddtrace_span_fci *span_fci) {
         return;
     }
     ddtrace_span_t *span = &span_fci->span;
-#if PHP_VERSION_ID < 70000
     if (span->span_data) {
         zval_ptr_dtor(&span->span_data);
         span->span_data = NULL;
@@ -38,17 +37,6 @@ static void _free_span(ddtrace_span_fci *span_fci) {
         zval_ptr_dtor(&span_fci->exception);
         span_fci->exception = NULL;
     }
-#else
-    if (span->span_data) {
-        zval_ptr_dtor(span->span_data);
-        efree(span->span_data);
-        span->span_data = NULL;
-    }
-    if (span_fci->exception) {
-        OBJ_RELEASE(span_fci->exception);
-        span_fci->exception = NULL;
-    }
-#endif
 
     efree(span_fci);
 }
@@ -98,11 +86,7 @@ void ddtrace_open_span(ddtrace_span_fci *span_fci TSRMLS_DC) {
     ddtrace_span_t *span = &span_fci->span;
 
     /* On PHP 5 object_init_ex does not set refcount to 1, but on PHP 7 it does */
-#if PHP_VERSION_ID < 70000
     MAKE_STD_ZVAL(span->span_data);
-#else
-    span->span_data = (zval *)ecalloc(1, sizeof(zval));
-#endif
     object_init_ex(span->span_data, ddtrace_ce_span_data);
 
     // Peek at the active span ID before we push a new one onto the stack
@@ -141,7 +125,7 @@ void ddtrace_close_span(TSRMLS_D) {
 
     // A userland span might still be open so we check the span ID stack instead of the internal span stack
     if (DDTRACE_G(span_ids_top) == NULL && get_dd_trace_auto_flush_enabled()) {
-        if (ddtrace_flush_tracer() == FAILURE) {
+        if (!ddtrace_flush_tracer(TSRMLS_C)) {
             ddtrace_log_debug("Unable to auto flush the tracer");
         }
     }

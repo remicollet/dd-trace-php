@@ -39,11 +39,7 @@ static inline uint64_t zval_to_uint64(zval *zid) {
         return 0U;
     }
     const char *id = Z_STRVAL_P(zid);
-#if PHP_VERSION_ID >= 70000
-    size_t i = 0;
-#else
     int i = 0;
-#endif
     for (; i < Z_STRLEN_P(zid); i++) {
         if (id[i] < '0' || id[i] > '9') {
             return 0U;
@@ -65,8 +61,12 @@ BOOL_T ddtrace_set_userland_trace_id(zval *zid TSRMLS_DC) {
 
 uint64_t ddtrace_push_span_id(uint64_t id TSRMLS_DC) {
     ddtrace_span_ids_t *stack = ecalloc(1, sizeof(ddtrace_span_ids_t));
-    // Shift one bit to get 63-bit; add 1 since "0" can indicate a root span
-    stack->id = id ? id : (uint64_t)((genrand64_int64() >> 1) + 1);
+    stack->id = id ? id : (uint64_t)((genrand64_int64()));
+    if (0 == stack->id) {
+        // Add 1 since "0" can indicate a root span
+        stack->id += 1;
+    }
+
     stack->next = DDTRACE_G(span_ids_top);
     DDTRACE_G(span_ids_top) = stack;
     // If a distributed trace has not set this value before an ID is generated,

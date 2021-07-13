@@ -3,6 +3,7 @@
 namespace DDTrace\Tests\Common;
 
 use DDTrace\Integrations\IntegrationsLoader;
+use DDTrace\NoopTracer;
 
 /**
  * A basic class to be extended when testing integrations.
@@ -17,7 +18,6 @@ abstract class IntegrationTestCase extends BaseTestCase
     public static function ddSetUpBeforeClass()
     {
         parent::ddSetUpBeforeClass();
-        IntegrationsLoader::reload();
     }
 
     public static function ddTearDownAfterClass()
@@ -39,6 +39,7 @@ abstract class IntegrationTestCase extends BaseTestCase
             \PHPUnit_Framework_Error_Warning::$enabled = true;
         }
         \dd_trace_internal_fn('ddtrace_reload_config');
+        \DDTrace\GlobalTracer::set(new NoopTracer());
         parent::ddTearDown();
     }
 

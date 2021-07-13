@@ -6,9 +6,9 @@
 #include <Zend/zend_generators.h>
 #include <Zend/zend_interfaces.h>
 #include <Zend/zend_observer.h>
+#include <exceptions/exceptions.h>
+#include <functions/functions.h>
 #include <stdbool.h>
-
-#include <ext/spl/spl_exceptions.h>
 
 #include "ext/php8/compatibility.h"
 #include "ext/php8/ddtrace.h"
@@ -22,8 +22,6 @@ ZEND_EXTERN_MODULE_GLOBALS(ddtrace)
 
 int ddtrace_resource = -1;
 int ddtrace_op_array_extension = 0;
-
-ZEND_TLS zend_function *dd_integrations_load_deferred_integration = NULL;
 
 #define RETURN_VALUE_USED(opline) ((opline)->result_type != IS_UNUSED)
 
@@ -73,8 +71,7 @@ static ZEND_RESULT_CODE dd_sandbox_fci_call(zend_execute_data *call, zend_fcall_
         dd_try_fetch_executing_function_name(call, &scope, &colon, &name);
 
         if (PG(last_error_message) && backup.eh.message != PG(last_error_message)) {
-            char *error;
-            error = ZSTR_VAL(PG(last_error_message));
+            char *error = ZSTR_VAL(PG(last_error_message));
             ddtrace_log_errf("Error raised in ddtrace's closure for %s%s%s(): %s in %s on line %d", scope, colon, name,
                              error, PG(last_error_file), PG(last_error_lineno));
         }
@@ -82,16 +79,10 @@ static ZEND_RESULT_CODE dd_sandbox_fci_call(zend_execute_data *call, zend_fcall_
         if (UNEXPECTED(EG(exception))) {
             zend_object *ex = EG(exception);
 
-            const char *type = ex->ce->name->val;
-            zval rv, obj;
-            ZVAL_OBJ(&obj, ex);
-            zval *message = GET_PROPERTY(&obj, ZEND_STR_MESSAGE);
-            const char *msg =
-                Z_TYPE_P(message) == IS_STRING ? Z_STR_P(message)->val : "(internal error reading exception message)";
-            ddtrace_log_errf("%s thrown in ddtrace's closure for %s%s%s(): %s", type, scope, colon, name, msg);
-            if (message == &rv) {
-                zval_dtor(message);
-            }
+            const char *type = ZSTR_VAL(ex->ce->name);
+            zend_string *msg = zai_exception_message(ex);
+            ddtrace_log_errf("%s thrown in ddtrace's closure for %s%s%s(): %s", type, scope, colon, name,
+                             ZSTR_VAL(msg));
         }
     }
     ddtrace_sandbox_end(&backup);
@@ -101,70 +92,66 @@ static ZEND_RESULT_CODE dd_sandbox_fci_call(zend_execute_data *call, zend_fcall_
     return ret;
 }
 
+static void dd_load_deferred_integration(zend_class_entry *scope, zval *fname, ddtrace_dispatch_t **dispatch,
+                                         HashTable *dispatch_table) {
+    zval *integration = &(*dispatch)->deferred_load_integration_name;
+
+    if (Z_TYPE_P(integration) == IS_NULL) {
+        *dispatch = NULL;
+        return;
+    }
+
+    // Protect against the free when we remove the dispatch from dispatch_table
+    ddtrace_dispatch_copy(*dispatch);
+
+    if (UNEXPECTED(FAILURE == zend_hash_del(dispatch_table, Z_STR((*dispatch)->function_name)))) {
+        ddtrace_log_debugf("Failed to remove deferred dispatch for %s%s%s", ZSTR_VAL(scope->name), (scope ? "::" : ""),
+                           Z_STRVAL_P(fname));
+    }
+
+    zval retval = {0};
+    bool success = zai_call_function_literal("ddtrace\\integrations\\load_deferred_integration", &retval, integration);
+    zval_ptr_dtor(&retval);
+
+    ddtrace_dispatch_release(*dispatch);
+
+    if (UNEXPECTED(!success)) {
+        *dispatch = NULL;
+        ddtrace_log_debugf(
+            "Error loading deferred integration '%s' from DDTrace\\Integrations\\load_deferred_integration",
+            Z_STRVAL_P(integration));
+        return;
+    }
+
+    *dispatch = ddtrace_find_dispatch(scope, fname);
+}
+
 static bool dd_should_trace_helper(zend_execute_data *call, zend_function *fbc, ddtrace_dispatch_t **dispatch_ptr) {
     if (DDTRACE_G(class_lookup) == NULL || DDTRACE_G(function_lookup) == NULL) {
         return false;
     }
 
-    // Don't trace closures or functions without names
+    // Don't trace closures or {main}/includes
     if ((fbc->common.fn_flags & ZEND_ACC_CLOSURE) || !fbc->common.function_name) {
         return false;
     }
 
-    zval fname = ddtrace_zval_zstr(fbc->common.function_name);
-
     zend_class_entry *scope = dd_get_called_scope(call);
-
+    zval fname = ddtrace_zval_zstr(fbc->common.function_name);
     ddtrace_dispatch_t *dispatch = NULL;
-    HashTable *function_table = NULL;
-    bool found = ddtrace_try_find_dispatch(scope, &fname, &dispatch, &function_table);
-    if (found && dispatch->options & DDTRACE_DISPATCH_DEFERRED_LOADER) {
-        do {
-            if (Z_TYPE(dispatch->deferred_load_integration_name) == IS_NULL) {
-                dispatch = NULL;
-                break;
-            }
-            zend_string *load_func = zend_string_init(ZEND_STRL("ddtrace\\integrations\\load_deferred_integration"), 0);
-            if (!zend_hash_exists(EG(function_table), load_func)) {
-                dispatch = NULL;
-                zend_string_release(load_func);
-                ddtrace_log_debug(
-                    "Cannot load deferred integrations: DDTrace\\Integrations\\load_deferred_integration does not "
-                    "exist");
-                break;
-            }
+    HashTable *dispatch_table = NULL;
 
-            ddtrace_sandbox_backup backup = ddtrace_sandbox_begin();
+    bool found = ddtrace_try_find_dispatch(scope, &fname, &dispatch, &dispatch_table);
 
-            // protect against the free when we remove the dispatch from function_table
-            ddtrace_dispatch_copy(dispatch);
-
-            ZEND_RESULT_CODE deleted = zend_hash_del(function_table, Z_STR(dispatch->function_name));
-            if (UNEXPECTED(deleted != SUCCESS)) {
-                ddtrace_log_debugf("Failed to remove deferred dispatch for %s%s%s", ZSTR_VAL(scope->name),
-                                   scope ? "::" : "", Z_STRVAL(fname));
-            }
-
-            zval retval = {.u1.type_info = IS_UNDEF};
-            zval *integration = &dispatch->deferred_load_integration_name;
-            zend_function **fn_proxy = &dd_integrations_load_deferred_integration;
-            ZEND_RESULT_CODE status =
-                ddtrace_call_function(fn_proxy, ZSTR_VAL(load_func), ZSTR_LEN(load_func), &retval, 1, integration);
-
-            ddtrace_dispatch_release(dispatch);
-            dispatch = EXPECTED(status == SUCCESS) ? ddtrace_find_dispatch(scope, &fname) : NULL;
-            zval_ptr_dtor(&retval);
-
-            ddtrace_sandbox_end(&backup);
-
-            zend_string_release(load_func);
-        } while (0);
+    if (found && (dispatch->options & DDTRACE_DISPATCH_DEFERRED_LOADER)) {
+        dd_load_deferred_integration(scope, &fname, &dispatch, dispatch_table);
     }
 
     if (dispatch_ptr != NULL) {
         *dispatch_ptr = dispatch;
     }
-    return dispatch;
+
+    return dispatch != NULL;
 }
 
 static bool dd_should_trace_runtime(ddtrace_dispatch_t *dispatch) {
@@ -305,12 +292,12 @@ static bool dd_execute_tracing_closure(zval *callable, zval *span_data, zend_exe
 static bool dd_call_sandboxed_tracing_closure(ddtrace_span_fci *span_fci, zval *callable, zval *user_retval) {
     zend_execute_data *call = span_fci->execute_data;
     ddtrace_span_t *span = &span_fci->span;
-    zval user_args;
+    zval user_args, span_zv;
 
+    ZVAL_OBJ(&span_zv, &span->std);
     dd_copy_args(&user_args, call);
 
-    bool keep_span =
-        dd_execute_tracing_closure(callable, span->span_data, call, &user_args, user_retval, EG(exception));
+    bool keep_span = dd_execute_tracing_closure(callable, &span_zv, call, &user_args, user_retval, EG(exception));
 
     zval_dtor(&user_args);
 
@@ -387,7 +374,7 @@ static ZEND_RESULT_CODE dd_do_hook_method_prehook(zend_execute_data *call, ddtra
 }
 
 static ddtrace_span_fci *dd_fcall_begin_tracing_hook(zend_execute_data *call, ddtrace_dispatch_t *dispatch) {
-    ddtrace_span_fci *span_fci = ecalloc(1, sizeof(*span_fci));
+    ddtrace_span_fci *span_fci = ddtrace_init_span();
     span_fci->execute_data = call;
     span_fci->dispatch = dispatch;
     ddtrace_open_span(span_fci);
@@ -423,7 +410,7 @@ static ddtrace_span_fci *dd_create_duplicate_span(zend_execute_data *call, ddtra
      * We want any children to be inherited by the currently active span, not
      * this fake one, so we duplicate the span_id.
      */
-    ddtrace_span_fci *span_fci = ecalloc(1, sizeof(*span_fci));
+    ddtrace_span_fci *span_fci = ddtrace_init_span();
     span_fci->execute_data = call;
     span_fci->dispatch = dispatch;
 
@@ -433,7 +420,7 @@ static ddtrace_span_fci *dd_create_duplicate_span(zend_execute_data *call, ddtra
     ddtrace_span_t *span = &span_fci->span;
 
     span->trace_id = DDTRACE_G(trace_id);
-    span->span_id = ddtrace_peek_span_id(TSRMLS_C);
+    span->span_id = ddtrace_peek_span_id();
 
     // if you push a span_id of 0 it makes a new span id, which we don't want
     if (span->span_id) {
@@ -495,21 +482,19 @@ void dd_set_fqn(zval *zv, zend_execute_data *ex) {
 
 static void dd_set_default_properties(void) {
     ddtrace_span_fci *span_fci = DDTRACE_G(open_spans_top);
-    if (span_fci == NULL || span_fci->span.span_data == NULL || span_fci->execute_data == NULL) {
+    if (span_fci == NULL || span_fci->execute_data == NULL) {
         return;
     }
 
     ddtrace_span_t *span = &span_fci->span;
     // SpanData::$name defaults to fully qualified called name
     // The other span property defaults are set at serialization time
-    zval *prop_name = ddtrace_spandata_property_name(span->span_data);
-    if (prop_name && Z_TYPE_P(prop_name) == IS_NULL) {
+    zval *prop_name = ddtrace_spandata_property_name(span);
+    if (prop_name && Z_TYPE_P(prop_name) <= IS_NULL) {
         zval prop_name_default;
         ZVAL_NULL(&prop_name_default);
         dd_set_fqn(&prop_name_default, span_fci->execute_data);
         ZVAL_COPY_VALUE(prop_name, &prop_name_default);
-        zval_copy_ctor(prop_name);
-        zval_dtor(&prop_name_default);
     }
 }
 
@@ -602,9 +587,11 @@ static void dd_fcall_end_tracing_posthook(ddtrace_span_fci *span_fci, zval *user
 
     bool keep_span = dd_call_sandboxed_tracing_closure(span_fci, &dispatch->posthook, user_retval);
 
+    ddtrace_close_userland_spans_until(span_fci);  // because dropping / setting default properties happens on top span
+
     if (keep_span) {
         dd_set_default_properties();
-        ddtrace_close_span();
+        ddtrace_close_span(span_fci);
     } else {
         ddtrace_drop_top_open_span();
     }
@@ -628,8 +615,10 @@ static void dd_fcall_end_tracing_prehook(ddtrace_span_fci *span_fci, zval *user_
     UNUSED(user_retval);
     dd_trace_stop_span_time(&span_fci->span);
 
+    ddtrace_close_userland_spans_until(span_fci);  // because setting default properties happens on top span
+
     dd_set_default_properties();
-    ddtrace_close_span();
+    ddtrace_close_span(span_fci);
 }
 
 static void dd_fcall_end_non_tracing_prehook(ddtrace_span_fci *span_fci, zval *user_retval) {
@@ -646,7 +635,7 @@ static void (*dd_fcall_end[])(ddtrace_span_fci *span_fci, zval *user_retval) = {
 };
 
 static void dd_observer_end(zend_function *fbc, ddtrace_span_fci *span_fci, zval *user_retval) {
-    if (span_fci == DDTRACE_G(open_spans_top)) {
+    if (ddtrace_has_top_internal_span(span_fci)) {
         ddtrace_dispatch_t *dispatch = span_fci->dispatch;
         uint16_t offset = DDTRACE_DISPATCH_JUMP_OFFSET(dispatch->options);
         (dd_fcall_end[offset])(span_fci, user_retval);
@@ -723,11 +712,19 @@ static bool dd_is_catching_frame(zend_execute_data *execute_data) {
 
 void ddtrace_close_all_open_spans(void) {
     ddtrace_span_fci *span_fci;
-    while ((span_fci = DDTRACE_G(open_spans_top))) {
-        zval retval;
-        ZVAL_NULL(&retval);
-        dd_observer_end(NULL, span_fci, &retval);
+    while ((span_fci = DDTRACE_G(open_spans_top)) && (span_fci->execute_data != NULL || span_fci->next)) {
+        if (span_fci->execute_data) {
+            zval retval;
+            ZVAL_NULL(&retval);
+            dd_observer_end(NULL, span_fci, &retval);
+        } else if (get_dd_autofinish_spans()) {
+            dd_trace_stop_span_time(&span_fci->span);
+            ddtrace_close_span(span_fci);
+        } else {
+            ddtrace_drop_top_open_span();
+        }
     }
+    DDTRACE_G(open_spans_top) = span_fci;
 }
 
 static void dd_observer_begin_handler(zend_execute_data *execute_data) {
@@ -765,9 +762,6 @@ zend_observer_fcall_handlers ddtrace_observer_fcall_init(zend_execute_data *exec
     }
     return (zend_observer_fcall_handlers){NULL, NULL};
 }
-
-void ddtrace_engine_hooks_rinit(void) { dd_integrations_load_deferred_integration = NULL; }
-void ddtrace_engine_hooks_rshutdown(void) { dd_integrations_load_deferred_integration = NULL; }
 
 PHP_FUNCTION(ddtrace_internal_function_handler) {
     ddtrace_dispatch_t *dispatch;

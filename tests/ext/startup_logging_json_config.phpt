@@ -1,5 +1,7 @@
 --TEST--
 Startup logging config from JSON fetched at runtime
+--SKIPIF--
+<?php if (PHP_VERSION_ID < 80000) die('skip: Test requires internal spans'); ?>
 --ENV--
 DD_ENV=my-env
 DD_SERVICE=my-service
@@ -65,8 +67,8 @@ enabled_cli: true
 debug: true
 sample_rate: 0.4200
 sampling_rules: "[{"service": "a.*", "name": "b", "sample_rate": 0.1}, {"sample_rate": 0.2}]"
-tags: "key1:value1,key2:value2"
-service_mapping: "pdo:payments-db,mysqli:orders-db"
+tags: {"key1":"value1","key2":"value2"}
+service_mapping: {"pdo":"payments-db","mysqli":"orders-db"}
 distributed_tracing_enabled: false
 priority_sampling_enabled: false
 dd_version: "4.2"
@@ -82,3 +84,4 @@ traced_internal_functions: "array_sum,mt_rand,DateTime::add"
 auto_prepend_file_configured: true
 integrations_disabled: "curl,mysqli"
 enabled_from_env: false
+No finished traces to be sent to the agent

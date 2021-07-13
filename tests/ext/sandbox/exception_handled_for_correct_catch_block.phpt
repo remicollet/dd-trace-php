@@ -1,5 +1,7 @@
 --TEST--
 Exceptions are handled for the correct catch block
+--SKIPIF--
+<?php if (PHP_VERSION_ID < 80000) die('skip: requires improved exception handling'); ?>
 --FILE--
 <?php
 use DDTrace\SpanData;
@@ -67,10 +69,10 @@ array_map(function($span) {
     echo PHP_EOL;
 }, dd_trace_serialize_closed_spans());
 ?>
---EXPECT--
+--EXPECTF--
 BarException caught
 BarException caught
 embeddedCatch, BarException caught
-throwException, throwException, Oops!
+throwException, throwException, Uncaught BarException: Oops! in %s:%d
 multiCatch, BarException caught
-throwException, throwException, Oops!
+throwException, throwException, Uncaught BarException: Oops! in %s:%d

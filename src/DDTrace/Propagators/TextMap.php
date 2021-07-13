@@ -96,7 +96,7 @@ final class TextMap implements Propagator
         if (!$traceId) {
             return false;
         }
-        if (dd_trace_set_trace_id($traceId)) {
+        if (\dd_trace_set_trace_id($traceId)) {
             return true;
         }
         if (\ddtrace_config_debug_enabled()) {
@@ -122,7 +122,12 @@ final class TextMap implements Propagator
         if (!$spanId) {
             return '';
         }
-        $pushedSpanId = dd_trace_push_span_id($spanId);
+
+        if (PHP_VERSION_ID >= 80000) {
+            return $spanId;
+        }
+
+        $pushedSpanId = \dd_trace_push_span_id($spanId);
         if ($pushedSpanId === $spanId) {
             return $spanId;
         }

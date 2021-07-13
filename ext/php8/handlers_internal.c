@@ -44,6 +44,15 @@ void ddtrace_replace_internal_methods(ddtrace_string Class, size_t methods_len, 
     ddtrace_replace_internal_functions(function_table, methods_len, methods);
 }
 
+void dd_install_handler(dd_zif_handler handler) {
+    zend_function *old_handler;
+    old_handler = zend_hash_str_find_ptr(CG(function_table), handler.name, handler.name_len);
+    if (old_handler != NULL) {
+        *handler.old_handler = old_handler->internal_function.handler;
+        old_handler->internal_function.handler = handler.new_handler;
+    }
+}
+
 void ddtrace_internal_handlers_install(ddtrace_string traced_internal_functions) {
     while (traced_internal_functions.len) {
         size_t delimiter = ddtrace_string_find_char(traced_internal_functions, ',');
@@ -83,21 +92,28 @@ void ddtrace_internal_handlers_install(ddtrace_string traced_internal_functions)
 }
 
 void ddtrace_curl_handlers_startup(void);
+void ddtrace_exception_handlers_startup(void);
 void ddtrace_memcached_handlers_startup(void);
 void ddtrace_mysqli_handlers_startup(void);
+void ddtrace_pcntl_handlers_startup(void);
 void ddtrace_pdo_handlers_startup(void);
 void ddtrace_phpredis_handlers_startup(void);
 
+void ddtrace_exception_handlers_shutdown(void);
 void ddtrace_mysqli_handlers_shutdown(void);
 void ddtrace_pdo_handlers_shutdown(void);
 
 void ddtrace_curl_handlers_rinit(void);
+void ddtrace_exception_handlers_rinit(void);
+
 void ddtrace_curl_handlers_rshutdown(void);
 
 // Internal handlers use ddtrace_resource and only implement the sandbox API.
 void ddtrace_internal_handlers_startup(void) {
     // curl is different; it has pieces that always run.
     ddtrace_curl_handlers_startup();
+    // pcntl handlers have to run even if tracing of pcntl extension is not enabled.
+    ddtrace_pcntl_handlers_startup();
 
     // but the rest should be guarded
     if (ddtrace_resource == -1) {
@@ -110,6 +126,7 @@ void ddtrace_internal_handlers_startup(void) {
         return;
     }
 
+    ddtrace_exception_handlers_startup();
     ddtrace_memcached_handlers_startup();
     ddtrace_mysqli_handlers_startup();
     ddtrace_pdo_handlers_startup();
@@ -126,18 +143,17 @@ void ddtrace_internal_handlers_startup(void) {
     }
 
     // These don't have a better place to go (yet, anyway)
-    ddtrace_string handlers[] = {
-        DDTRACE_STRING_LITERAL("header"),
-        DDTRACE_STRING_LITERAL("http_response_code"),
-    };
-    size_t handlers_len = sizeof handlers / sizeof handlers[0];
-    ddtrace_replace_internal_functions(CG(function_table), handlers_len, handlers);
 }
 
 void ddtrace_internal_handlers_shutdown(void) {
     ddtrace_mysqli_handlers_shutdown();
     ddtrace_pdo_handlers_shutdown();
+    ddtrace_exception_handlers_shutdown();
 }
 
-void ddtrace_internal_handlers_rinit(void) { ddtrace_curl_handlers_rinit(); }
+void ddtrace_internal_handlers_rinit(void) {
+    ddtrace_curl_handlers_rinit();
+    ddtrace_exception_handlers_rinit();
+}
+
 void ddtrace_internal_handlers_rshutdown(void) { ddtrace_curl_handlers_rshutdown(); }

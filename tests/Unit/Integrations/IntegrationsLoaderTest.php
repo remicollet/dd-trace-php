@@ -161,6 +161,7 @@ final class IntegrationsLoaderTest extends BaseTestCase
             // Deferred loading integrations
             $excluded[] = 'elasticsearch';
             $excluded[] = 'memcached';
+            $excluded[] = 'nette';
             $excluded[] = 'pdo';
             $excluded[] = 'phpredis';
             $excluded[] = 'predis';
@@ -173,7 +174,6 @@ final class IntegrationsLoaderTest extends BaseTestCase
             $excluded[] = 'cakephp';
             $excluded[] = 'lumen';
             $excluded[] = 'mongo';
-            $excluded[] = 'symfony';
             $excluded[] = 'zendframework';
         }
         foreach ($excluded as $integrationToExclude) {

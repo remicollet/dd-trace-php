@@ -1,6 +1,9 @@
 --TEST--
 DDTrace\trace_function() can trace with internal spans
+--SKIPIF--
+<?php if (PHP_VERSION_ID < 80000) die('skip: Test requires internal spans'); ?>
 --ENV--
+DD_TRACE_GENERATE_ROOT_SPAN=0
 DD_TRACE_TRACED_INTERNAL_FUNCTIONS=array_sum,mt_rand
 --FILE--
 <?php
@@ -62,7 +65,7 @@ var_dump(DDTrace\trace_function(
 
 testFoo();
 var_dump(addOne(0));
-$ret = bar('tracing is awesome', ['first', 'foo-red', 'bar-green']);
+$ret = bar('tracing is awesome', ['first', 1.2, '25']);
 var_dump($ret);
 
 echo "---\n";
@@ -94,9 +97,9 @@ array(5) {
   [0]=>
   array(10) {
     ["trace_id"]=>
-    int(%d)
+    string(%d) "%d"
     ["span_id"]=>
-    int(%d)
+    string(%d) "%d"
     ["start"]=>
     int(%d)
     ["duration"]=>
@@ -123,21 +126,23 @@ array(5) {
       string(%d) "%d"
     }
     ["metrics"]=>
-    array(2) {
+    array(3) {
       ["foo"]=>
-      string(7) "foo-red"
+      float(1.2)
       ["bar"]=>
-      string(9) "bar-green"
+      float(25)
+      ["php.compilation.total_time_ms"]=>
+      float(%f)
     }
   }
   [1]=>
   array(7) {
     ["trace_id"]=>
-    int(%d)
+    string(%d) "%d"
     ["span_id"]=>
-    int(%d)
+    string(%d) "%d"
     ["parent_id"]=>
-    int(%d)
+    string(%d) "%d"
     ["start"]=>
     int(%d)
     ["duration"]=>
@@ -150,11 +155,11 @@ array(5) {
   [2]=>
   array(7) {
     ["trace_id"]=>
-    int(%d)
+    string(%d) "%d"
     ["span_id"]=>
-    int(%d)
+    string(%d) "%d"
     ["parent_id"]=>
-    int(%d)
+    string(%d) "%d"
     ["start"]=>
     int(%d)
     ["duration"]=>
@@ -165,11 +170,11 @@ array(5) {
     string(6) "AddOne"
   }
   [3]=>
-  array(7) {
+  array(8) {
     ["trace_id"]=>
-    int(%d)
+    string(%d) "%d"
     ["span_id"]=>
-    int(%d)
+    string(%d) "%d"
     ["start"]=>
     int(%d)
     ["duration"]=>
@@ -183,13 +188,18 @@ array(5) {
       ["system.pid"]=>
       string(%d) "%d"
     }
+    ["metrics"]=>
+    array(1) {
+      ["php.compilation.total_time_ms"]=>
+      float(%f)
+    }
   }
   [4]=>
-  array(7) {
+  array(8) {
     ["trace_id"]=>
-    int(%d)
+    string(%d) "%d"
     ["span_id"]=>
-    int(%d)
+    string(%d) "%d"
     ["start"]=>
     int(%d)
     ["duration"]=>
@@ -202,6 +212,11 @@ array(5) {
     array(1) {
       ["system.pid"]=>
       string(%d) "%d"
+    }
+    ["metrics"]=>
+    array(1) {
+      ["php.compilation.total_time_ms"]=>
+      float(%f)
     }
   }
 }

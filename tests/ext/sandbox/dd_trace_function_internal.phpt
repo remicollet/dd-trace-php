@@ -1,6 +1,9 @@
 --TEST--
 DDTrace\trace_function() can trace internal functions with internal spans
+--SKIPIF--
+<?php if (PHP_VERSION_ID < 80000) die('skip: Test requires internal spans'); ?>
 --ENV--
+DD_TRACE_GENERATE_ROOT_SPAN=0
 DD_TRACE_TRACED_INTERNAL_FUNCTIONS=array_sum
 --FILE--
 <?php
@@ -23,11 +26,11 @@ int(9)
 ---
 array(1) {
   [0]=>
-  array(7) {
+  array(8) {
     ["trace_id"]=>
-    int(%d)
+    string(%d) "%d"
     ["span_id"]=>
-    int(%d)
+    string(%d) "%d"
     ["start"]=>
     int(%d)
     ["duration"]=>
@@ -40,6 +43,11 @@ array(1) {
     array(1) {
       ["system.pid"]=>
       string(%d) "%d"
+    }
+    ["metrics"]=>
+    array(1) {
+      ["php.compilation.total_time_ms"]=>
+      float(%f)
     }
   }
 }

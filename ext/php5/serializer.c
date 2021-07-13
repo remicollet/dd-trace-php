@@ -2,7 +2,10 @@
 #include <Zend/zend_builtin_functions.h>
 #include <Zend/zend_exceptions.h>
 #include <Zend/zend_interfaces.h>
+#include <inttypes.h>
 #include <php.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include <ext/spl/spl_exceptions.h>
 
@@ -17,6 +20,11 @@
 
 ZEND_EXTERN_MODULE_GLOBALS(ddtrace);
 
+#define MAX_ID_BUFSIZ 21  // 1.8e^19 = 20 chars + 1 terminator
+#define KEY_TRACE_ID "trace_id"
+#define KEY_SPAN_ID "span_id"
+#define KEY_PARENT_ID "parent_id"
+
 static int msgpack_write_zval(mpack_writer_t *writer, zval *trace TSRMLS_DC);
 
 static int write_hash_table(mpack_writer_t *writer, HashTable *ht TSRMLS_DC) {
@@ -25,7 +33,7 @@ static int write_hash_table(mpack_writer_t *writer, HashTable *ht TSRMLS_DC) {
     uint str_len;
     HashPosition iterator;
     zend_ulong num_key;
-    int key_type;
+    int key_type = HASH_KEY_NON_EXISTANT;
     bool first_time = true;
 
     zend_hash_internal_pointer_reset_ex(ht, &iterator);
@@ -39,16 +47,32 @@ static int write_hash_table(mpack_writer_t *writer, HashTable *ht TSRMLS_DC) {
                 mpack_start_array(writer, zend_hash_num_elements(ht));
             }
         }
+
+        // Writing the key, if associative
+        bool zval_string_as_uint64 = false;
         if (key_type == HASH_KEY_IS_STRING) {
             mpack_write_cstr(writer, string_key);
+            // If the key is trace_id, span_id or parent_id then strings have to be converted to uint64 when packed.
+            if (0 == strcmp(KEY_TRACE_ID, string_key) || 0 == strcmp(KEY_SPAN_ID, string_key) ||
+                0 == strcmp(KEY_PARENT_ID, string_key)) {
+                zval_string_as_uint64 = true;
+            }
         }
-        if (msgpack_write_zval(writer, *tmp TSRMLS_CC) != 1) {
+
+        // Writing the value
+        if (zval_string_as_uint64) {
+            mpack_write_u64(writer, strtoull(Z_STRVAL_PP(tmp), NULL, 10));
+        } else if (msgpack_write_zval(writer, *tmp TSRMLS_CC) != 1) {
             return 0;
         }
+
         zend_hash_move_forward_ex(ht, &iterator);
     }
 
-    if (key_type == HASH_KEY_IS_STRING) {
+    if (key_type == HASH_KEY_NON_EXISTANT) {
+        mpack_start_array(writer, 0);
+        mpack_finish_array(writer);
+    } else if (key_type == HASH_KEY_IS_STRING) {
         mpack_finish_map(writer);
     } else {
         mpack_finish_array(writer);
@@ -131,14 +155,6 @@ static zval *_read_span_property(zval *span_data, const char *name, size_t name_
     return zend_read_property(ddtrace_ce_span_data, span_data, name, name_len, 1 TSRMLS_CC);
 }
 
-static void _add_assoc_zval_copy(zval *el, const char *name, zval *prop) {
-    zval *value;
-    ALLOC_ZVAL(value);
-    INIT_PZVAL_COPY(value, prop);
-    zval_copy_ctor(value);
-    add_assoc_zval(el, name, value);
-}
-
 /* gettraceasstring() macros
  * @see https://github.com/php/php-src/blob/PHP-5.4/Zend/zend_exceptions.c#L364-L395
  * {{{ */
@@ -167,10 +183,10 @@ static void _add_assoc_zval_copy(zval *el, const char *name, zval *prop) {
  * @see https://github.com/php/php-src/blob/PHP-5.4/Zend/zend_exceptions.c#L543-L605
  */
 static int _trace_string(zval **frame TSRMLS_DC, int num_args, va_list args, zend_hash_key *hash_key) {
-    PHP5_UNUSED(hash_key);
+    UNUSED(hash_key);
 #ifdef ZTS
     /* This arg is required for the zend_hash_apply_with_arguments function signature, but we don't need it */
-    PHP5_UNUSED(TSRMLS_C);
+    UNUSED(TSRMLS_C);
 #endif
 
     char *s_tmp, **str;
@@ -396,10 +412,18 @@ void ddtrace_serialize_span_to_array(ddtrace_span_fci *span_fci, zval *array TSR
     ALLOC_INIT_ZVAL(el);
     array_init(el);
 
-    add_assoc_long(el, "trace_id", span->trace_id);
-    add_assoc_long(el, "span_id", span->span_id);
+    char trace_id_str[MAX_ID_BUFSIZ];
+    sprintf(trace_id_str, "%" PRIu64, span->trace_id);
+    add_assoc_string(el, KEY_TRACE_ID, trace_id_str, /* duplicate */ 1);
+
+    char span_id_str[MAX_ID_BUFSIZ];
+    sprintf(span_id_str, "%" PRIu64, span->span_id);
+    add_assoc_string(el, KEY_SPAN_ID, span_id_str, /* duplicate */ 1);
+
     if (span->parent_id > 0) {
-        add_assoc_long(el, "parent_id", span->parent_id);
+        char parent_id_str[MAX_ID_BUFSIZ];
+        sprintf(parent_id_str, "%" PRIu64, span->parent_id);
+        add_assoc_string(el, KEY_PARENT_ID, parent_id_str, /* duplicate */ 1);
     }
     add_assoc_long(el, "start", span->start);
     add_assoc_long(el, "duration", span->duration);
@@ -434,8 +458,26 @@ void ddtrace_serialize_span_to_array(ddtrace_span_fci *span_fci, zval *array TSR
     _serialize_meta(el, span_fci TSRMLS_CC);
 
     zval *metrics = _read_span_property(span->span_data, ZEND_STRL("metrics") TSRMLS_CC);
-    if (Z_TYPE_P(metrics) == IS_ARRAY) {
-        _add_assoc_zval_copy(el, "metrics", metrics);
+    if (Z_TYPE_P(metrics) == IS_ARRAY && zend_hash_num_elements(Z_ARRVAL_P(metrics))) {
+        zval *metrics_zv;
+        ALLOC_INIT_ZVAL(metrics_zv);
+        array_init(metrics_zv);
+        HashPosition pos;
+        zval **metric_value;
+        for (zend_hash_internal_pointer_reset_ex(Z_ARRVAL_P(metrics), &pos);
+             zend_hash_get_current_data_ex(Z_ARRVAL_P(metrics), (void **)&metric_value, &pos) == SUCCESS;
+             zend_hash_move_forward_ex(Z_ARRVAL_P(metrics), &pos)) {
+            ulong num_key;
+            char *str_key;
+            if (zend_hash_get_current_key_ex(Z_ARRVAL_P(metrics), &str_key, NULL, &num_key, 0, &pos) ==
+                HASH_KEY_IS_STRING) {
+                zval value;
+                MAKE_COPY_ZVAL(metric_value, &value);
+                convert_to_double(&value);
+                add_assoc_double(metrics_zv, str_key, Z_DVAL(value));
+            }
+        }
+        add_assoc_zval(el, "metrics", metrics_zv);
     }
 
     add_next_index_zval(array, el);

@@ -3,7 +3,10 @@
 #include <Zend/zend_exceptions.h>
 #include <Zend/zend_interfaces.h>
 #include <Zend/zend_smart_str.h>
+#include <inttypes.h>
 #include <php.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include <ext/spl/spl_exceptions.h>
 
@@ -18,9 +21,14 @@
 
 ZEND_EXTERN_MODULE_GLOBALS(ddtrace);
 
-static int msgpack_write_zval(mpack_writer_t *writer, zval *trace TSRMLS_DC);
+#define MAX_ID_BUFSIZ 21  // 1.8e^19 = 20 chars + 1 terminator
+#define KEY_TRACE_ID "trace_id"
+#define KEY_SPAN_ID "span_id"
+#define KEY_PARENT_ID "parent_id"
 
-static int write_hash_table(mpack_writer_t *writer, HashTable *ht TSRMLS_DC) {
+static int msgpack_write_zval(mpack_writer_t *writer, zval *trace);
+
+static int write_hash_table(mpack_writer_t *writer, HashTable *ht) {
     zval *tmp;
     zend_string *string_key;
     int is_assoc = -1;
@@ -34,16 +42,31 @@ static int write_hash_table(mpack_writer_t *writer, HashTable *ht TSRMLS_DC) {
                 mpack_start_array(writer, zend_hash_num_elements(ht));
             }
         }
+
+        // Writing the key, if associative
+        bool zval_string_as_uint64 = false;
         if (is_assoc == 1) {
-            mpack_write_cstr(writer, ZSTR_VAL(string_key));
+            char *key = ZSTR_VAL(string_key);
+            mpack_write_cstr(writer, key);
+            // If the key is trace_id, span_id or parent_id then strings have to be converted to uint64 when packed.
+            if (0 == strcmp(KEY_TRACE_ID, key) || 0 == strcmp(KEY_SPAN_ID, key) || 0 == strcmp(KEY_PARENT_ID, key)) {
+                zval_string_as_uint64 = true;
+            }
         }
-        if (msgpack_write_zval(writer, tmp TSRMLS_CC) != 1) {
+
+        // Writing the value
+        if (zval_string_as_uint64) {
+            mpack_write_u64(writer, strtoull(Z_STRVAL_P(tmp), NULL, 10));
+        } else if (msgpack_write_zval(writer, tmp) != 1) {
             return 0;
         }
     }
     ZEND_HASH_FOREACH_END();
 
-    if (is_assoc) {
+    if (is_assoc == -1) {
+        mpack_start_array(writer, 0);
+        mpack_finish_array(writer);
+    } else if (is_assoc) {
         mpack_finish_map(writer);
     } else {
         mpack_finish_array(writer);
@@ -51,14 +74,14 @@ static int write_hash_table(mpack_writer_t *writer, HashTable *ht TSRMLS_DC) {
     return 1;
 }
 
-static int msgpack_write_zval(mpack_writer_t *writer, zval *trace TSRMLS_DC) {
+static int msgpack_write_zval(mpack_writer_t *writer, zval *trace) {
     if (Z_TYPE_P(trace) == IS_REFERENCE) {
         trace = Z_REFVAL_P(trace);
     }
 
     switch (Z_TYPE_P(trace)) {
         case IS_ARRAY:
-            if (write_hash_table(writer, Z_ARRVAL_P(trace) TSRMLS_CC) != 1) {
+            if (write_hash_table(writer, Z_ARRVAL_P(trace)) != 1) {
                 return 0;
             }
             break;
@@ -76,7 +99,7 @@ static int msgpack_write_zval(mpack_writer_t *writer, zval *trace TSRMLS_DC) {
             mpack_write_bool(writer, Z_TYPE_P(trace) == IS_TRUE);
             break;
         case IS_STRING:
-            mpack_write_cstr(writer, ZSTR_VAL(Z_STR_P(trace)));
+            mpack_write_cstr(writer, Z_STRVAL_P(trace));
             break;
         default:
             ddtrace_log_debug("Serialize values must be of type array, string, int, float, bool or null");
@@ -86,13 +109,13 @@ static int msgpack_write_zval(mpack_writer_t *writer, zval *trace TSRMLS_DC) {
     return 1;
 }
 
-int ddtrace_serialize_simple_array_into_c_string(zval *trace, char **data_p, size_t *size_p TSRMLS_DC) {
+int ddtrace_serialize_simple_array_into_c_string(zval *trace, char **data_p, size_t *size_p) {
     // encode to memory buffer
     char *data;
     size_t size;
     mpack_writer_t writer;
     mpack_writer_init_growable(&writer, &data, &size);
-    if (msgpack_write_zval(&writer, trace TSRMLS_CC) != 1) {
+    if (msgpack_write_zval(&writer, trace) != 1) {
         mpack_writer_destroy(&writer);
         free(data);
         return 0;
@@ -113,12 +136,12 @@ int ddtrace_serialize_simple_array_into_c_string(zval *trace, char **data_p, siz
     }
 }
 
-int ddtrace_serialize_simple_array(zval *trace, zval *retval TSRMLS_DC) {
+int ddtrace_serialize_simple_array(zval *trace, zval *retval) {
     // encode to memory buffer
     char *data;
     size_t size;
 
-    if (ddtrace_serialize_simple_array_into_c_string(trace, &data, &size TSRMLS_CC)) {
+    if (ddtrace_serialize_simple_array_into_c_string(trace, &data, &size)) {
         ZVAL_STRINGL(retval, data, size);
         free(data);
         return 1;
@@ -326,11 +349,6 @@ typedef struct dd_error_info {
 static zend_string *dd_error_type(int code) {
     const char *error_type = "{unknown error}";
 
-#if PHP_VERSION_ID >= 80000
-    // mask off flags such as E_DONT_BAIL
-    code &= E_ALL;
-#endif
-
     switch (code) {
         case E_ERROR:
             error_type = "E_ERROR";
@@ -363,7 +381,6 @@ static zend_string *dd_fatal_error_stack(void) {
     return error_stack;
 }
 
-#if PHP_VERSION_ID < 80000
 static zend_string *dd_vprintf_zstr(size_t len, const char *format, va_list args) {
     va_list args2;
 
@@ -459,7 +476,6 @@ static dd_error_info dd_fatal_error(int type, const char *format, va_list args) 
         .stack = dd_fatal_error_stack(),
     };
 }
-#endif
 
 static int dd_fatal_error_to_meta(zval *meta, dd_error_info error) {
     HashTable *ht = Z_ARR_P(meta);
@@ -536,17 +552,25 @@ static void _dd_add_assoc_zval_as_string(zval *el, const char *name, zval *value
     zval_dtor(&value_as_string);
 }
 
-void ddtrace_serialize_span_to_array(ddtrace_span_fci *span_fci, zval *array TSRMLS_DC) {
+void ddtrace_serialize_span_to_array(ddtrace_span_fci *span_fci, zval *array) {
     ddtrace_span_t *span = &span_fci->span;
     zval *el;
     zval zv;
     el = &zv;
     array_init(el);
 
-    add_assoc_long(el, "trace_id", span->trace_id);
-    add_assoc_long(el, "span_id", span->span_id);
+    char trace_id_str[MAX_ID_BUFSIZ];
+    sprintf(trace_id_str, "%" PRIu64, span->trace_id);
+    add_assoc_string(el, KEY_TRACE_ID, trace_id_str);
+
+    char span_id_str[MAX_ID_BUFSIZ];
+    sprintf(span_id_str, "%" PRIu64, span->span_id);
+    add_assoc_string(el, KEY_SPAN_ID, span_id_str);
+
     if (span->parent_id > 0) {
-        add_assoc_long(el, "parent_id", span->parent_id);
+        char parent_id_str[MAX_ID_BUFSIZ];
+        sprintf(parent_id_str, "%" PRIu64, span->parent_id);
+        add_assoc_string(el, KEY_PARENT_ID, parent_id_str);
     }
     add_assoc_long(el, "start", span->start);
     add_assoc_long(el, "duration", span->duration);
@@ -583,17 +607,27 @@ void ddtrace_serialize_span_to_array(ddtrace_span_fci *span_fci, zval *array TSR
         _dd_add_assoc_zval_as_string(el, "type", prop_type);
     }
 
-    _serialize_meta(el, span_fci TSRMLS_CC);
+    _serialize_meta(el, span_fci);
 
     zval *metrics = ddtrace_spandata_property_metrics(span->span_data);
-    if (Z_TYPE_P(metrics) == IS_ARRAY) {
-        _add_assoc_zval_copy(el, "metrics", metrics);
+    ZVAL_DEREF(metrics);
+    if (Z_TYPE_P(metrics) == IS_ARRAY && zend_hash_num_elements(Z_ARR_P(metrics))) {
+        zval metrics_zv;
+        array_init(&metrics_zv);
+        zend_string *str_key;
+        zval *val;
+        ZEND_HASH_FOREACH_STR_KEY_VAL_IND(Z_ARR_P(metrics), str_key, val) {
+            if (str_key) {
+                add_assoc_double(&metrics_zv, ZSTR_VAL(str_key), zval_get_double(val));
+            }
+        }
+        ZEND_HASH_FOREACH_END();
+        add_assoc_zval(el, "metrics", &metrics_zv);
     }
 
     add_next_index_zval(array, el);
 }
 
-#if PHP_VERSION_ID < 80000
 void ddtrace_error_cb(DDTRACE_ERROR_CB_PARAMETERS) {
     /* We need the error handling to place nicely with the sandbox. The best
      * idea so far is to execute fatal error handling code iff the error handling
@@ -642,73 +676,3 @@ void ddtrace_error_cb(DDTRACE_ERROR_CB_PARAMETERS) {
 
     ddtrace_prev_error_cb(DDTRACE_ERROR_CB_PARAM_PASSTHRU);
 }
-#else
-
-static zend_string *dd_truncate_uncaught_exception(zend_string *msg) {
-    const char uncaught[] = "Uncaught ";
-    const char *data = ZSTR_VAL(msg);
-    size_t uncaught_len = sizeof uncaught - 1;  // ignore the null terminator
-    size_t size = ZSTR_LEN(msg);
-    if (size > uncaught_len && memcmp(data, uncaught, uncaught_len) == 0) {
-        char *newline = memchr(data, '\n', size);
-        if (newline) {
-            size_t offset = newline - data;
-            return zend_string_init(data, offset, 0);
-        }
-    }
-    return zend_string_copy(msg);
-}
-
-void ddtrace_observer_error_cb(int type, const char *error_filename, uint32_t error_lineno, zend_string *message) {
-    UNUSED(error_filename, error_lineno);
-
-    /* We need the error handling to place nicely with the sandbox. The best
-     * idea so far is to execute fatal error handling code iff the error handling
-     * mode is set to EH_NORMAL. If it's something else, such as EH_SUPPRESS or
-     * EH_THROW, then they are likely to be handled and accordingly they
-     * shouldn't be treated as fatal.
-     */
-    bool is_fatal_error = type & (E_ERROR | E_CORE_ERROR | E_COMPILE_ERROR | E_USER_ERROR);
-    if (EXPECTED(EG(active)) && EG(error_handling) == EH_NORMAL && UNEXPECTED(is_fatal_error)) {
-        /* If there is a fatal error in shutdown then this might not be an array
-         * because we set it to IS_NULL in RSHUTDOWN. We probably want a more
-         * robust way of detecting this, but I'm not sure how yet.
-         */
-        if (Z_TYPE(DDTRACE_G(additional_trace_meta)) == IS_ARRAY) {
-            dd_error_info error = {
-                .type = dd_error_type(type),
-                .msg = dd_truncate_uncaught_exception(message),
-                .stack = dd_fatal_error_stack(),
-            };
-            dd_fatal_error_to_meta(&DDTRACE_G(additional_trace_meta), error);
-            ddtrace_span_fci *span;
-            for (span = DDTRACE_G(open_spans_top); span; span = span->next) {
-                if (span->exception || !span->span.span_data) {
-                    continue;
-                }
-
-                zval *meta = ddtrace_spandata_property_meta(span->span.span_data);
-                if (!meta) {
-                    continue;
-                }
-
-                if (Z_TYPE_P(meta) != IS_ARRAY) {
-                    zval_ptr_dtor(meta);
-                    array_init_size(meta, ddtrace_num_error_tags);
-                }
-                dd_fatal_error_to_meta(meta, error);
-            }
-            if (error.type) {
-                zend_string_release(error.type);
-            }
-            if (error.msg) {
-                zend_string_release(error.msg);
-            }
-            if (error.stack) {
-                zend_string_release(error.stack);
-            }
-            ddtrace_close_all_open_spans();
-        }
-    }
-}
-#endif

@@ -30,19 +30,14 @@ static bool dd_try_find_function_dispatch(HashTable *ht, zval *fname, ddtrace_di
 }
 
 static bool dd_try_find_method_dispatch(zend_class_entry *class, zval *fname, ddtrace_dispatch_t **dispatch_ptr,
-                                        HashTable **function_table TSRMLS_DC) {
+                                        HashTable **function_table) {
     if (!fname || !Z_STRVAL_P(fname)) {
         return false;
     }
     HashTable *class_lookup = NULL;
 
-#if PHP_VERSION_ID < 70000
-    const char *class_name = class->name;
-    size_t class_name_length = class->name_length;
-#else
     const char *class_name = ZSTR_VAL(class->name);
     size_t class_name_length = ZSTR_LEN(class->name);
-#endif
 
     class_lookup = ddtrace_hash_find_ptr_lc(DDTRACE_G(class_lookup), class_name, class_name_length);
     if (class_lookup) {
@@ -51,38 +46,29 @@ static bool dd_try_find_method_dispatch(zend_class_entry *class, zval *fname, dd
         }
     }
 
-    return class->parent ? dd_try_find_method_dispatch(class->parent, fname, dispatch_ptr, function_table TSRMLS_CC)
-                         : false;
+    return class->parent ? dd_try_find_method_dispatch(class->parent, fname, dispatch_ptr, function_table) : false;
 }
 
 bool ddtrace_try_find_dispatch(zend_class_entry *scope, zval *fname, ddtrace_dispatch_t **dispatch_ptr,
-                               HashTable **function_table TSRMLS_DC) {
-    return scope ? dd_try_find_method_dispatch(scope, fname, dispatch_ptr, function_table TSRMLS_CC)
+                               HashTable **function_table) {
+    return scope ? dd_try_find_method_dispatch(scope, fname, dispatch_ptr, function_table)
                  : dd_try_find_function_dispatch(DDTRACE_G(function_lookup), fname, dispatch_ptr, function_table);
 }
 
-ddtrace_dispatch_t *ddtrace_find_dispatch(zend_class_entry *scope, zval *fname TSRMLS_DC) {
+ddtrace_dispatch_t *ddtrace_find_dispatch(zend_class_entry *scope, zval *fname) {
     ddtrace_dispatch_t *dispatch = NULL;
     HashTable *function_table = NULL;
 
-    ddtrace_try_find_dispatch(scope, fname, &dispatch, &function_table TSRMLS_CC);
+    ddtrace_try_find_dispatch(scope, fname, &dispatch, &function_table);
     return dispatch;
 }
 
-#if PHP_VERSION_ID >= 70000
 static void dispatch_table_dtor(zval *zv) {
     zend_hash_destroy(Z_PTR_P(zv));
     efree(Z_PTR_P(zv));
 }
-#else
-static void dispatch_table_dtor(void *zv) {
-    HashTable *ht = *(HashTable **)zv;
-    zend_hash_destroy(ht);
-    efree(ht);
-}
-#endif
 
-void ddtrace_dispatch_init(TSRMLS_D) {
+void ddtrace_dispatch_init(void) {
     if (!DDTRACE_G(class_lookup)) {
         ALLOC_HASHTABLE(DDTRACE_G(class_lookup));
         zend_hash_init(DDTRACE_G(class_lookup), 8, NULL, (dtor_func_t)dispatch_table_dtor, 0);
@@ -94,7 +80,7 @@ void ddtrace_dispatch_init(TSRMLS_D) {
     }
 }
 
-void ddtrace_dispatch_destroy(TSRMLS_D) {
+void ddtrace_dispatch_destroy(void) {
     if (DDTRACE_G(class_lookup)) {
         zend_hash_destroy(DDTRACE_G(class_lookup));
         FREE_HASHTABLE(DDTRACE_G(class_lookup));
@@ -108,32 +94,17 @@ void ddtrace_dispatch_destroy(TSRMLS_D) {
     }
 }
 
-static HashTable *_get_lookup_for_target(zval *class_name TSRMLS_DC) {
+static HashTable *_get_lookup_for_target(zval *class_name) {
     HashTable *overridable_lookup = NULL;
     if (class_name && DDTRACE_G(class_lookup)) {
-#if PHP_VERSION_ID < 70000
-        // downcase the class name before lookup as class names are case insensitive.
-        zval *class_name_prev = class_name;
-        MAKE_STD_ZVAL(class_name);
-        ZVAL_STRINGL(class_name, Z_STRVAL_P(class_name_prev), Z_STRLEN_P(class_name_prev), 1);
-        ddtrace_downcase_zval(class_name);
-        overridable_lookup =
-            ddtrace_hash_find_ptr(DDTRACE_G(class_lookup), Z_STRVAL_P(class_name), Z_STRLEN_P(class_name));
-        if (!overridable_lookup) {
-            overridable_lookup = ddtrace_new_class_lookup(class_name TSRMLS_CC);
-        }
-        zval_ptr_dtor(&class_name);
-        class_name = class_name_prev;
-#else
         zend_string *class_name_lc = zend_string_tolower(Z_STR_P(class_name));
         overridable_lookup = zend_hash_find_ptr(DDTRACE_G(class_lookup), class_name_lc);
         if (!overridable_lookup) {
             zval tmp;
             ZVAL_STR(&tmp, class_name_lc);
-            overridable_lookup = ddtrace_new_class_lookup(&tmp TSRMLS_CC);
+            overridable_lookup = ddtrace_new_class_lookup(&tmp);
         }
         zend_string_release(class_name_lc);
-#endif
     } else {
         overridable_lookup = DDTRACE_G(function_lookup);
     }
@@ -141,8 +112,8 @@ static HashTable *_get_lookup_for_target(zval *class_name TSRMLS_DC) {
     return overridable_lookup;
 }
 
-zend_bool ddtrace_trace(zval *class_name, zval *function_name, zval *callable, uint32_t options TSRMLS_DC) {
-    HashTable *overridable_lookup = _get_lookup_for_target(class_name TSRMLS_CC);
+zend_bool ddtrace_trace(zval *class_name, zval *function_name, zval *callable, uint32_t options) {
+    HashTable *overridable_lookup = _get_lookup_for_target(class_name);
     if (overridable_lookup == NULL) {
         return FALSE;
     }
@@ -156,11 +127,7 @@ zend_bool ddtrace_trace(zval *class_name, zval *function_name, zval *callable, u
         ZVAL_NULL(&dispatch.callable);
     }
 
-#if PHP_VERSION_ID < 70000
-    ZVAL_STRINGL(&dispatch.function_name, Z_STRVAL_P(function_name), Z_STRLEN_P(function_name), 1);
-#else
     ZVAL_COPY(&dispatch.function_name, function_name);
-#endif
     ddtrace_downcase_zval(&dispatch.function_name);  // method/function names are case insensitive in PHP
     dispatch.options = options;
 
@@ -173,7 +140,7 @@ zend_bool ddtrace_trace(zval *class_name, zval *function_name, zval *callable, u
 }
 
 zend_bool ddtrace_hook_callable(ddtrace_string class_name, ddtrace_string function_name, ddtrace_string callable,
-                                uint32_t options TSRMLS_DC) {
+                                uint32_t options) {
     HashTable *overridable_lookup;
     ddtrace_dispatch_t dispatch;
     memset(&dispatch, 0, sizeof(ddtrace_dispatch_t));
@@ -190,10 +157,10 @@ zend_bool ddtrace_hook_callable(ddtrace_string class_name, ddtrace_string functi
         // class name handling in get_lookup involves another copy as well as downcasing
         // TODO: we should avoid doing that
         DDTRACE_STRING_ZVAL_L(&z_class_name, class_name);
-        overridable_lookup = _get_lookup_for_target(&z_class_name TSRMLS_CC);
+        overridable_lookup = _get_lookup_for_target(&z_class_name);
         zval_dtor(&z_class_name);
     } else {
-        overridable_lookup = _get_lookup_for_target(NULL TSRMLS_CC);
+        overridable_lookup = _get_lookup_for_target(NULL);
     }
     zend_bool dispatch_stored = FALSE;
     if (overridable_lookup) {

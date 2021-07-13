@@ -10,28 +10,34 @@ The easiest way to get the development environment set up is to install [Docker]
 ## Developing and testing locally
 
 While tests in CI run on all php versions, you typically develop on one version locally. Currently the latest local
-dev environment we support is `7.3`.
+dev environment we support is `8.0`.
+
+Ensure that docker has at least 4 GB of RAM available, otherwise composer may run out of memory.
 
 Execute one the following commands from your command line, this will bring up all required services:
 
 ```bash
 # For 5.4
-$ docker-compose run --rm 5.4-debug-buster bash
+$ docker-compose run --rm 5.4-buster bash
 # For 5.5
-$ docker-compose run --rm 5.5-debug-buster bash
+$ docker-compose run --rm 5.5-buster bash
 # For 5.6
-$ docker-compose run --rm 5.6-debug-buster bash
+$ docker-compose run --rm 5.6-buster bash
 # For 7.0
-$ docker-compose run --rm 7.0-debug-buster bash
+$ docker-compose run --rm 7.0-buster bash
 # For 7.1
-$ docker-compose run --rm 7.1-debug-buster bash
+$ docker-compose run --rm 7.1-buster bash
 # For 7.2
-$ docker-compose run --rm 7.2-debug-buster bash
+$ docker-compose run --rm 7.2-buster bash
 # For 7.3
-$ docker-compose run --rm 7.3-debug-buster bash
+$ docker-compose run --rm 7.3-buster bash
 # For 7.4
-$ docker-compose run --rm 7.4-debug-buster bash
+$ docker-compose run --rm 7.4-buster bash
+# For 8.0
+$ docker-compose run --rm 8.0-buster bash
 ```
+
+> :memo: **Note:** To run the container in debug mode, pass pass docker-composer an environment variable: `DD_TRACE_DOCKER_DEBUG=1`
 
 Once inside the container, update dependencies with Composer.
 
@@ -45,7 +51,7 @@ Then install the `ddtrace` extension.
 $ composer install-ext
 ```
 
-> **Note:** You'll need to run the above `install-ext` command to install the `ddtrace` extension every time you access the container's bash for the first time.
+> :memo: **Note:** You'll need to run the above `install-ext` command to install the `ddtrace` extension every time you access the container's bash for the first time.
 
 You can check that the extension was installed properly.
 
@@ -79,6 +85,10 @@ $ docker-compose down -v
 First you need to update composer's dependecies in `./tests` folder:
 
     $ make composer_tests_update
+
+> :memo: **Note:** To disable reliance on the generated files during development and testing, set the following environment variable:
+>
+> `export DD_AUTOLOAD_NO_COMPILE=true`
 
 Then you can run tests:
 

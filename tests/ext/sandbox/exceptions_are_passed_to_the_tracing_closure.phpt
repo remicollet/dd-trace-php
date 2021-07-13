@@ -1,6 +1,7 @@
 --TEST--
 Exceptions from original call are passed to tracing closure (PHP 7)
 --SKIPIF--
+<?php if (PHP_VERSION_ID < 80000) die('skip: requires improved exception handling'); ?>
 <?php if (PHP_VERSION_ID < 70000) die('skip PHP 5 tested in separate test'); ?>
 --FILE--
 <?php
@@ -42,10 +43,10 @@ array_map(function($span) {
     echo PHP_EOL;
 }, dd_trace_serialize_closed_spans());
 ?>
---EXPECT--
+--EXPECTF--
 testExceptionIsNull()
 bool(true)
 testExceptionIsPassed()
 bool(true)
-TestEx with exception: Oops!
+TestEx with exception: Uncaught Exception: Oops! in %s:%d
 TestNull

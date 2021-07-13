@@ -1,7 +1,8 @@
 #include <php.h>
 #include <stdbool.h>
 
-#include <ext/curl/php_curl.h>
+__attribute__((weak)) zend_class_entry *curl_ce = NULL;
+__attribute__((weak)) zend_class_entry *curl_multi_ce = NULL;
 
 #include "configuration.h"
 #include "engine_api.h"
@@ -351,23 +352,6 @@ ZEND_FUNCTION(ddtrace_curl_setopt_array) {
     }
 }
 
-struct dd_curl_handler {
-    const char *name;
-    size_t name_len;
-    void (**old_handler)(INTERNAL_FUNCTION_PARAMETERS);
-    void (*new_handler)(INTERNAL_FUNCTION_PARAMETERS);
-};
-typedef struct dd_curl_handler dd_curl_handler;
-
-static void dd_install_handler(dd_curl_handler handler) {
-    zend_function *old_handler;
-    old_handler = zend_hash_str_find_ptr(CG(function_table), handler.name, handler.name_len);
-    if (old_handler != NULL) {
-        *handler.old_handler = old_handler->internal_function.handler;
-        old_handler->internal_function.handler = handler.new_handler;
-    }
-}
-
 /* This function is called during process startup so all of the memory allocations should be
  * persistent to avoid using the Zend Memory Manager. This will avoid an accidental use after free.
  *
@@ -386,6 +370,35 @@ void ddtrace_curl_handlers_startup(void) {
         return;
     }
 
+    /* If curl is loaded as a shared library we need to fetch the addresses of
+     * the class entry symbols and account or any name mangling.
+     */
+    zend_module_entry *curl_me = NULL;
+    if (curl_ce == NULL || curl_multi_ce == NULL) {
+        curl_me = zend_hash_str_find_ptr(&module_registry, ZEND_STRL("curl"));
+    }
+
+    if (curl_me != NULL && curl_me->handle) {
+        zend_class_entry **curl_ce_ptr = (zend_class_entry **)DL_FETCH_SYMBOL(curl_me->handle, "curl_ce");
+        if (curl_ce_ptr == NULL) {
+            curl_ce_ptr = (zend_class_entry **)DL_FETCH_SYMBOL(curl_me->handle, "_curl_ce");
+        }
+
+        zend_class_entry **curl_multi_ce_ptr = (zend_class_entry **)DL_FETCH_SYMBOL(curl_me->handle, "curl_multi_ce");
+        if (curl_multi_ce_ptr == NULL) {
+            curl_multi_ce_ptr = (zend_class_entry **)DL_FETCH_SYMBOL(curl_me->handle, "_curl_multi_ce");
+        }
+
+        if (curl_ce_ptr != NULL && curl_multi_ce_ptr != NULL) {
+            curl_ce = *curl_ce_ptr;
+            curl_multi_ce = *curl_multi_ce_ptr;
+        } else {
+            ddtrace_log_debug("Unable to load ext/curl symbols");
+            dd_ext_curl_loaded = false;
+            return;
+        }
+    }
+
     zend_string *const_name = zend_string_init(ZEND_STRL("CURLOPT_HTTPHEADER"), 1);
     zval *const_value = zend_get_constant_ex(const_name, NULL, ZEND_FETCH_CLASS_SILENT);
     zend_string_release(const_name);
@@ -402,7 +415,7 @@ void ddtrace_curl_handlers_startup(void) {
      * The latter expects the former is already done because it needs a span id for the distributed tracing headers;
      * register them inside-out.
      */
-    dd_curl_handler handlers[] = {
+    dd_zif_handler handlers[] = {
         {ZEND_STRL("curl_close"), &dd_curl_close_handler, ZEND_FN(ddtrace_curl_close)},
         {ZEND_STRL("curl_copy_handle"), &dd_curl_copy_handle_handler, ZEND_FN(ddtrace_curl_copy_handle)},
         {ZEND_STRL("curl_exec"), &dd_curl_exec_handler, ZEND_FN(ddtrace_curl_exec)},

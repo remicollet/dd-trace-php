@@ -139,7 +139,7 @@ class GuzzleIntegrationTest extends IntegrationTestCase
         });
 
         // trace is: custom
-        self::assertSame($traces[0][0]['span_id'], (int) $found['headers']['X-Datadog-Trace-Id']);
+        self::assertSame($traces[0][0]['trace_id'], $found['headers']['X-Datadog-Trace-Id']);
 
         // Find either the guzzle or curl span; prefer the latter
         $guzzleSpan = find_span_name($traces[0], 'GuzzleHttp\\Client.send');
@@ -151,7 +151,7 @@ class GuzzleIntegrationTest extends IntegrationTestCase
             self::fail('Unable to find a guzzle or curl span!');
         }
 
-        self::assertSame($span['span_id'], (int) $found['headers']['X-Datadog-Parent-Id']);
+        self::assertSame($span['span_id'], $found['headers']['X-Datadog-Parent-Id']);
 
         self::assertSame('1', $found['headers']['X-Datadog-Sampling-Priority']);
         // existing headers are honored
@@ -186,48 +186,27 @@ class GuzzleIntegrationTest extends IntegrationTestCase
         $headers1 = [];
         $headers2 = [];
 
-        $traces = $this->isolateTracer(function () use (&$headers1, &$headers2) {
-            /** @var Tracer $tracer */
-            $tracer = GlobalTracer::get();
-            $tracer->setPrioritySampling(PrioritySampling::AUTO_KEEP);
-            $span = $tracer->startActiveSpan('custom')->getSpan();
+        $traces = $this->inWebServer(
+            function ($execute) use (&$headers1, &$headers2) {
+                list($headers1, $headers2) = json_decode($execute(GetSpec::create(
+                    __FUNCTION__,
+                    '/guzzle_in_distributed_web_request.php',
+                    [
+                    'x-datadog-sampling-priority: ' . PrioritySampling::AUTO_KEEP,
+                    ]
+                )), 1);
+            },
+            __DIR__ . '/guzzle_in_distributed_web_request.php'
+        );
 
-            $curl = new CurlMultiHandler();
-            $client = new Client(['handler' => $curl]);
-
-            $future1 = $client->get(self::URL . '/headers', [
-                'future' => true,
-                'headers' => [
-                    'honored' => 'preserved_value',
-                ],
-            ]);
-            $future1->then(function ($response) use (&$headers1) {
-                $headers1 = $response->json();
-            });
-
-            $future2 = $client->get(self::URL . '/headers', [
-                'future' => true,
-                'headers' => [
-                    'honored' => 'preserved_value',
-                ],
-            ]);
-            $future2->then(function ($response) use (&$headers2) {
-                $headers2 = $response->json();
-            });
-
-            $future1->wait();
-            $future2->wait();
-
-            $span->finish();
-        });
-
-        $this->assertFlameGraph($traces, [
-            SpanAssertion::build('custom', 'cli', '', 'custom')
+        $this->assertOneSpan(
+            $traces,
+            SpanAssertion::forOperation('web.request')
                 ->withChildren([
                     SpanAssertion::exists('GuzzleHttp\Client.send'),
                     SpanAssertion::exists('GuzzleHttp\Client.send'),
-                ]),
-        ]);
+                ])
+        );
 
         $rootSpan = $traces[0][0];
         self::assertSame(
@@ -252,11 +231,11 @@ class GuzzleIntegrationTest extends IntegrationTestCase
     {
         self::assertSame(
             $span['span_id'],
-            (int) $headers['X-Datadog-Parent-Id']
+            $headers['X-Datadog-Parent-Id']
         );
         self::assertSame(
             $span['trace_id'],
-            (int) $headers['X-Datadog-Trace-Id']
+            $headers['X-Datadog-Trace-Id']
         );
         self::assertSame('preserved_value', $headers['Honored']);
     }
@@ -297,8 +276,8 @@ class GuzzleIntegrationTest extends IntegrationTestCase
         self::assertEquals(1, sizeof($traces[0]));
 
         // trace is: custom
-        self::assertSame($traces[0][0]['span_id'], (int) $found['headers']['X-Datadog-Trace-Id']);
-        self::assertSame($traces[0][0]['span_id'], (int) $found['headers']['X-Datadog-Parent-Id']);
+        self::assertSame($traces[0][0]['trace_id'], $found['headers']['X-Datadog-Trace-Id']);
+        self::assertSame($traces[0][0]['span_id'], $found['headers']['X-Datadog-Parent-Id']);
 
         self::assertSame('1', $found['headers']['X-Datadog-Sampling-Priority']);
         // existing headers are honored

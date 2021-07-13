@@ -2,9 +2,13 @@
 
 namespace DDTrace;
 
-use DDTrace\Encoders\Json;
-use DDTrace\Encoders\SpanEncoder;
+use DDTrace\Contracts\Scope as ScopeInterface;
+use DDTrace\Contracts\Span as SpanInterface;
+use DDTrace\Contracts\SpanContext as SpanContextInterface;
+use DDTrace\Contracts\Tracer as TracerInterface;
 use DDTrace\Encoders\MessagePack;
+use DDTrace\Encoders\SpanEncoder;
+use DDTrace\Exceptions\UnsupportedFormat;
 use DDTrace\Log\LoggingTrait;
 use DDTrace\Propagators\CurlHeadersMap;
 use DDTrace\Propagators\Noop as NoopPropagator;
@@ -12,12 +16,9 @@ use DDTrace\Propagators\TextMap;
 use DDTrace\Sampling\ConfigurableSampler;
 use DDTrace\Sampling\Sampler;
 use DDTrace\Transport\Http;
+use DDTrace\Transport\Internal;
+use DDTrace\Transport\Noop;
 use DDTrace\Transport\Noop as NoopTransport;
-use DDTrace\Exceptions\UnsupportedFormat;
-use DDTrace\Contracts\Scope as ScopeInterface;
-use DDTrace\Contracts\Span as SpanInterface;
-use DDTrace\Contracts\SpanContext as SpanContextInterface;
-use DDTrace\Contracts\Tracer as TracerInterface;
 
 final class Tracer implements TracerInterface
 {
@@ -104,8 +105,8 @@ final class Tracer implements TracerInterface
      */
     public function __construct(Transport $transport = null, array $propagators = null, array $config = [])
     {
-        $encoder = getenv('DD_TRACE_ENCODER') === 'json' ? new Json() : new MessagePack();
-        $this->transport = $transport ?: new Http($encoder);
+        $encoder = new MessagePack();
+        $this->transport = $transport ?: (PHP_VERSION_ID >= 80000 ? new Internal() : new Http($encoder));
         $textMapPropagator = new TextMap($this);
         $this->propagators = $propagators ?: [
             Format::TEXT_MAP => $textMapPropagator,
@@ -114,6 +115,12 @@ final class Tracer implements TracerInterface
         ];
         $this->config = array_merge($this->config, $config);
         $this->reset();
+        if (PHP_VERSION_ID >= 80000) {
+            foreach ($this->config['global_tags'] as $key => $val) {
+                // @phpstan-ignore-next-line
+                add_global_tag($key, $val);
+            }
+        }
         $this->config['global_tags'] = array_merge($this->config['global_tags'], \ddtrace_config_global_tags());
         $this->serviceVersion = \ddtrace_config_service_version();
         $this->environment = \ddtrace_config_env();
@@ -168,16 +175,27 @@ final class Tracer implements TracerInterface
         if ($reference === null) {
             $context = SpanContext::createAsRoot();
         } else {
-            $context = SpanContext::createAsChild($reference->getContext());
+            // avoid rounding errors, we only care about microsecond resolution here
+            $roundedStartTime = ($options->getStartTime() + 0.2) / 1000000;
+            $context = SpanContext::createAsChild($reference->getContext(), $roundedStartTime);
         }
 
-        $span = new Span(
-            $operationName,
-            $context,
-            $this->config['service_name'],
-            array_key_exists('resource', $this->config) ? $this->config['resource'] : null,
-            $options->getStartTime()
-        );
+        $resource = array_key_exists('resource', $this->config) ? (string) $this->config['resource'] : null;
+        $service = $this->config['service_name'];
+
+        if (PHP_VERSION_ID >= 80000) {
+            // @phpstan-ignore-next-line
+            $internalSpan = active_span();
+            $internalSpan->name = (string) $operationName;
+            $internalSpan->service = $service;
+            $internalSpan->resource = $resource;
+            $internalSpan->metrics = [];
+            $internalSpan->meta = [];
+            // @phpstan-ignore-next-line
+            $span = new Span($internalSpan, $context);
+        } else {
+            $span = new Span($operationName, $context, $service, $resource, $options->getStartTime());
+        }
 
         $tags = $options->getTags() + $this->getGlobalTags();
         if ($context->getParentId() === null) {
@@ -186,6 +204,19 @@ final class Tracer implements TracerInterface
 
         foreach ($tags as $key => $value) {
             $span->setTag($key, $value);
+        }
+
+        if ($reference === null) {
+            if (\ddtrace_config_hostname_reporting_enabled()) {
+                $hostname = gethostname();
+                if ($hostname !== false) {
+                    $span->setTag(Tag::HOSTNAME, $hostname);
+                }
+            }
+            // Call it here so that the data is there in any case, even when shutdown fatal errors
+            if ('cli' !== PHP_SAPI && \ddtrace_config_url_resource_name_enabled()) {
+                $this->addUrlAsResourceNameToSpan($span);
+            }
         }
 
         $this->record($span);
@@ -254,7 +285,9 @@ final class Tracer implements TracerInterface
             $span->setTag(Tag::SERVICE_NAME, $parentService);
         }
 
-        return $this->scopeManager->activate($span, $options->shouldFinishSpanOnClose());
+        $shouldFinish = $options->shouldFinishSpanOnClose() && (PHP_VERSION_ID < 80000 || $span->getParentId() != 0
+                || !\dd_trace_env_config('DD_TRACE_GENERATE_ROOT_SPAN'));
+        return $this->scopeManager->activate($span, $shouldFinish);
     }
 
     /**
@@ -306,12 +339,8 @@ final class Tracer implements TracerInterface
             return;
         }
 
-        // We should refactor these blocks to use a pre-flush hook
-        if (\ddtrace_config_hostname_reporting_enabled()) {
-            $this->addHostnameToRootSpan();
-        }
-        if ('cli' !== PHP_SAPI && \ddtrace_config_url_resource_name_enabled()) {
-            $this->addUrlAsResourceNameToRootSpan();
+        if ('cli' !== PHP_SAPI && \ddtrace_config_url_resource_name_enabled() && $rootScope = $this->getRootScope()) {
+            $this->addUrlAsResourceNameToSpan($rootScope->getSpan());
         }
 
         if (self::isLogDebugActive()) {
@@ -353,6 +382,11 @@ final class Tracer implements TracerInterface
      */
     public function getTracesAsArray()
     {
+        if (PHP_VERSION_ID >= 80000) {
+            $trace = \dd_trace_serialize_closed_spans();
+            return $trace ? [$trace] : $trace;
+        }
+
         $tracesToBeSent = [];
         $autoFinishSpans = \ddtrace_config_autofinish_span_enabled();
         $serviceMappings = \ddtrace_config_service_mapping();
@@ -394,7 +428,7 @@ final class Tracer implements TracerInterface
             }
         }
 
-        $internalSpans = dd_trace_serialize_closed_spans();
+        $internalSpans = \dd_trace_serialize_closed_spans();
 
         // Setting global tags on internal spans, if any
         $globalTags = $this->getGlobalTags();
@@ -431,24 +465,8 @@ final class Tracer implements TracerInterface
         return $tracesToBeSent;
     }
 
-    private function addHostnameToRootSpan()
+    public function addUrlAsResourceNameToSpan(Contracts\Span $span)
     {
-        $hostname = gethostname();
-        if ($hostname !== false) {
-            $span = $this->getRootScope()->getSpan();
-            if ($span !== null) {
-                $span->setTag(Tag::HOSTNAME, $hostname);
-            }
-        }
-    }
-
-    private function addUrlAsResourceNameToRootSpan()
-    {
-        $scope = $this->getRootScope();
-        if (null === $scope) {
-            return;
-        }
-        $span = $scope->getSpan();
         if (null !== $span->getResource()) {
             return;
         }
@@ -495,10 +513,11 @@ final class Tracer implements TracerInterface
             return;
         }
 
-        $this->prioritySampling = $span->getContext()->getPropagatedPrioritySampling();
-        if (null === $this->prioritySampling) {
-            $this->prioritySampling = $this->sampler->getPrioritySampling($span);
+        $prioritySampling = $span->getContext()->getPropagatedPrioritySampling();
+        if (null === $prioritySampling) {
+            $prioritySampling = $this->sampler->getPrioritySampling($span);
         }
+        $this->setPrioritySampling($prioritySampling);
     }
 
     /**
@@ -507,6 +526,17 @@ final class Tracer implements TracerInterface
     public function setPrioritySampling($prioritySampling)
     {
         $this->prioritySampling = $prioritySampling;
+
+        $rootSpan = $this->getSafeRootSpan();
+        if (null === $rootSpan) {
+            return;
+        }
+
+        if ($prioritySampling !== Sampling\PrioritySampling::UNKNOWN) {
+            $rootSpan->setMetric('_sampling_priority_v1', $prioritySampling);
+        } elseif (isset($rootSpan->metrics)) { // official API does not allow removal, so...
+            unset($rootSpan->metrics['_sampling_priority_v1']);
+        }
     }
 
     /**
@@ -552,7 +582,7 @@ final class Tracer implements TracerInterface
     /**
      * Enforce priority sampling on the root span.
      */
-    private function enforcePrioritySamplingOnRootSpan()
+    public function enforcePrioritySamplingOnRootSpan()
     {
         if ($this->prioritySampling !== Sampling\PrioritySampling::UNKNOWN) {
             return;
